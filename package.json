@@ -1,0 +1,11 @@
+{
+  "name": "flowbetter-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild frontend/components/RecoveryOptions.jsx --bundle --minify --format=iife --outfile=frontend/recovery-options.bundle.js",
+    "test": "node --test frontend/scoring.test.js"
+  },
+  "dependencies": {"react": "^19.2.0", "react-dom": "^19.2.0"},
+  "devDependencies": {"esbuild": "^0.25.0"}
+}

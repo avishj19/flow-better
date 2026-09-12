@@ -57,9 +57,9 @@ def test_projection_invalidates_and_expired_observations_block_approval(tmp_path
     r=c.post(path+'/weather-projection',json={'revision':1,'snapshot_id':s['id']}).json()
     assert r['revision']==2 and r['phase']=='disrupted' and len(r['state_versions'])==1
     assert not any(d['kind']=='weather' for d in r['scenario']['disruptions'])
-    assert c.post(path+'/approve',json={'revision':2,'experiment_id':old,'plan':'protect','confirm':True}).status_code==409
+    assert c.post(path+'/approve',json={'revision':2,'experiment_id':old,'plan':'loyalty','confirm':True}).status_code==409
     r=c.post(path+'/experiments',json={'revision':2}).json();new=r['experiments'][-1]['id']
     monkeypatch.setattr(live,'now',lambda:at+6000)
-    response=c.post(path+'/approve',json={'revision':2,'experiment_id':new,'plan':'protect','confirm':True})
+    response=c.post(path+'/approve',json={'revision':2,'experiment_id':new,'plan':'loyalty','confirm':True})
     assert response.status_code==409 and 'stale' in response.text
     assert c.post(path+'/weather-projection',json={'revision':2,'snapshot_id':s['id']},headers={'X-IROP-Desk':'other'}).status_code==404

@@ -118,6 +118,6 @@ def projected_weather(snapshot,at=None):
         minutes={'VFR':0,'MVFR':15,'IFR':30,'LIFR':60}[cat]
         if isinstance(gust,(int,float)) and gust>=30:minutes=max(minutes,45)
         if 'TS' in wx:minutes=max(minutes,60)
-        decisions.append({'airport':r['airport'],'observed_at':r['observed_at'],'category':cat,'hold_minutes':minutes,'rule':'demo-weather-v1','basis':'Hypothetical movement hold projected to synthetic 08:00; not an official closure'})
-        if minutes:disruptions.append({'id':'WX-'+r['airport'],'kind':'weather','airport':r['airport'],'start':480,'end':480+minutes,'label':f"{r['airport']} observed {cat} → hypothetical {minutes}m hold at synthetic 08:00",'source_snapshot':snapshot['id'],'observed_at':r['observed_at']})
+        decisions.append({'airport':r['airport'],'observed_at':r['observed_at'],'category':cat,'hold_minutes':minutes,'rule':'demo-weather-v1','basis':'Hypothetical movement hold projected to synthetic 19:00; not an official closure'})
+        if minutes:disruptions.append({'id':'WX-'+r['airport'],'kind':'weather','airport':r['airport'],'start':1140,'end':1140+minutes,'label':f"{r['airport']} observed {cat} → hypothetical {minutes}m hold at synthetic 19:00",'source_snapshot':snapshot['id'],'observed_at':r['observed_at']})
     return disruptions,decisions

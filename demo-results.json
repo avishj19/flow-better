@@ -1,199 +1,650 @@
 {
+  "model_version": 2,
   "seed": 42,
   "scope": "Synthetic model outputs; not airline outcomes",
   "baseline": {
-    "delayed_flights": 0,
-    "delay_minutes": 0,
-    "passenger_minutes": 0,
-    "missed_pax": 0,
-    "cost": 0.0,
-    "cost_breakdown": {
-      "passenger_delay": 0.0,
-      "missed_connections": 0,
-      "operating_delay": 0,
-      "aircraft_swaps": 0,
-      "reserve_crews": 0
+    "financial_cost": 0,
+    "passenger_impact": 0,
+    "network_health": 0,
+    "crew_buffer": {
+      "hours_remaining": 1.417,
+      "minutes_remaining": 85,
+      "exceeds_by_minutes": 0,
+      "isLegal": true,
+      "scope": "Simplified Part 117-inspired duty model; actual FAA legality is not evaluated."
     }
   },
   "options": [
     {
-      "plan": "protect",
-      "rank": 1,
-      "feasible": true,
+      "plan": "cfo",
+      "feasible": false,
+      "isLegal": false,
+      "scores": {
+        "financial_cost": 31500,
+        "passenger_impact": 33845,
+        "network_health": 20000,
+        "crew_buffer": {
+          "hours_remaining": -1.583,
+          "minutes_remaining": -95,
+          "exceeds_by_minutes": 95,
+          "isLegal": false,
+          "scope": "Simplified Part 117-inspired duty model; actual FAA legality is not evaluated."
+        }
+      },
       "metrics": {
-        "delayed_flights": 9,
-        "delay_minutes": 247,
-        "passenger_minutes": 30062,
+        "delayed_flights": 4,
+        "cancelled_flights": 0,
+        "delay_minutes": 315,
+        "passenger_minutes": 33845,
         "missed_pax": 0,
-        "cost": 29341.0,
+        "cost": 31500,
         "cost_breakdown": {
-          "passenger_delay": 15031.0,
-          "missed_connections": 0,
-          "operating_delay": 7410,
-          "aircraft_swaps": 4500,
-          "reserve_crews": 2400
-        }
-      },
-      "failed_checks": []
-    },
-    {
-      "plan": "combined",
-      "rank": 2,
-      "feasible": true,
-      "metrics": {
-        "delayed_flights": 7,
-        "delay_minutes": 203,
-        "passenger_minutes": 25304,
-        "missed_pax": 19,
-        "cost": 30392.0,
-        "cost_breakdown": {
-          "passenger_delay": 12652.0,
-          "missed_connections": 4750,
-          "operating_delay": 6090,
-          "aircraft_swaps": 4500,
-          "reserve_crews": 2400
-        }
-      },
-      "failed_checks": []
-    },
-    {
-      "plan": "crew",
-      "rank": 3,
-      "feasible": true,
-      "metrics": {
-        "delayed_flights": 12,
-        "delay_minutes": 1038,
-        "passenger_minutes": 114269,
-        "missed_pax": 58,
-        "cost": 105174.5,
-        "cost_breakdown": {
-          "passenger_delay": 57134.5,
-          "missed_connections": 14500,
-          "operating_delay": 31140,
-          "aircraft_swaps": 0,
-          "reserve_crews": 2400
-        }
-      },
-      "failed_checks": []
-    },
-    {
-      "plan": "remote",
-      "rank": null,
-      "feasible": false,
-      "metrics": {
-        "delayed_flights": 7,
-        "delay_minutes": 203,
-        "passenger_minutes": 25304,
-        "missed_pax": 19,
-        "cost": 30392.0,
-        "cost_breakdown": {
-          "passenger_delay": 12652.0,
-          "missed_connections": 4750,
-          "operating_delay": 6090,
-          "aircraft_swaps": 4500,
-          "reserve_crews": 2400
-        }
-      },
-      "failed_checks": [
-        {
-          "id": "E0410",
-          "kind": "aircraft_position",
-          "subject": "RX100",
-          "passed": false,
-          "detail": "R02 at BOS; departure requires PIT"
-        }
-      ]
-    },
-    {
-      "plan": "small",
-      "rank": null,
-      "feasible": false,
-      "metrics": {
-        "delayed_flights": 7,
-        "delay_minutes": 203,
-        "passenger_minutes": 25304,
-        "missed_pax": 19,
-        "cost": 30392.0,
-        "cost_breakdown": {
-          "passenger_delay": 12652.0,
-          "missed_connections": 4750,
-          "operating_delay": 6090,
-          "aircraft_swaps": 4500,
-          "reserve_crews": 2400
-        }
-      },
-      "failed_checks": [
-        {
-          "id": "E0003",
-          "kind": "capacity",
-          "subject": "RX100",
-          "passed": false,
-          "detail": "125 passengers / 60 seats on R03"
-        },
-        {
-          "id": "E0053",
-          "kind": "capacity",
-          "subject": "RX101",
-          "passed": false,
-          "detail": "92 passengers / 60 seats on R03"
-        },
-        {
-          "id": "E0103",
-          "kind": "capacity",
-          "subject": "RX102",
-          "passed": false,
-          "detail": "86 passengers / 60 seats on R03"
-        },
-        {
-          "id": "E0153",
-          "kind": "capacity",
-          "subject": "RX103",
-          "passed": false,
-          "detail": "132 passengers / 60 seats on R03"
-        },
-        {
-          "id": "E0203",
-          "kind": "capacity",
-          "subject": "RX104",
-          "passed": false,
-          "detail": "102 passengers / 60 seats on R03"
-        },
-        {
-          "id": "E0253",
-          "kind": "capacity",
-          "subject": "RX105",
-          "passed": false,
-          "detail": "100 passengers / 60 seats on R03"
-        }
-      ]
-    },
-    {
-      "plan": "delay",
-      "rank": null,
-      "feasible": false,
-      "metrics": {
-        "delayed_flights": 21,
-        "delay_minutes": 1441,
-        "passenger_minutes": 156661,
-        "missed_pax": 58,
-        "cost": 136060.5,
-        "cost_breakdown": {
-          "passenger_delay": 78330.5,
-          "missed_connections": 14500,
-          "operating_delay": 43230,
-          "aircraft_swaps": 0,
+          "delay": 31500,
+          "ferry_flights": 0,
+          "cancellations": 0,
           "reserve_crews": 0
         }
       },
-      "failed_checks": [
-        {
-          "id": "E0434",
-          "kind": "crew_duty",
-          "subject": "C01",
-          "passed": false,
-          "detail": "Duty incl. report/release 720m / 690m; report 330"
+      "details": {
+        "delay_minutes": 315,
+        "ferries": 0,
+        "cancelled": 0,
+        "reserve_crews": 0,
+        "passenger_minutes": 33845,
+        "missed_pax": 0,
+        "cost_breakdown": {
+          "delay": 31500,
+          "ferry_flights": 0,
+          "cancellations": 0,
+          "reserve_crews": 0
+        },
+        "crew_buffers": [
+          {
+            "crew": "C01",
+            "report": 710,
+            "release": 1455,
+            "deadline": 1360,
+            "minutes_remaining": -95
+          },
+          {
+            "crew": "C02",
+            "report": 718,
+            "release": 1358,
+            "deadline": 1408,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C03",
+            "report": 726,
+            "release": 1331,
+            "deadline": 1416,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C04",
+            "report": 734,
+            "release": 1339,
+            "deadline": 1424,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C05",
+            "report": 742,
+            "release": 1347,
+            "deadline": 1432,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C06",
+            "report": 750,
+            "release": 1355,
+            "deadline": 1440,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C07",
+            "report": 758,
+            "release": 1398,
+            "deadline": 1448,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C08",
+            "report": 766,
+            "release": 1371,
+            "deadline": 1456,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C09",
+            "report": 774,
+            "release": 1379,
+            "deadline": 1464,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C10",
+            "report": 782,
+            "release": 1387,
+            "deadline": 1472,
+            "minutes_remaining": 85
+          }
+        ],
+        "overnight_positions": [
+          {
+            "tail": "T01",
+            "position": "In flight ORD\u2192PIT",
+            "hub": "PIT",
+            "deadline": 1400,
+            "out_of_position": true,
+            "penalty": 20000
+          },
+          {
+            "tail": "T02",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T03",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T04",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T05",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T06",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T07",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T08",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T09",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T10",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "R01",
+            "position": "DTW",
+            "hub": "DTW",
+            "deadline": 1400,
+            "out_of_position": false,
+            "penalty": 0
+          }
+        ]
+      },
+      "pareto_optimal": false
+    },
+    {
+      "plan": "loyalty",
+      "feasible": true,
+      "isLegal": true,
+      "scores": {
+        "financial_cost": 37000,
+        "passenger_impact": 12635,
+        "network_health": 20000,
+        "crew_buffer": {
+          "hours_remaining": 0.833,
+          "minutes_remaining": 50,
+          "exceeds_by_minutes": 0,
+          "isLegal": true,
+          "scope": "Simplified Part 117-inspired duty model; actual FAA legality is not evaluated."
         }
-      ]
+      },
+      "metrics": {
+        "delayed_flights": 3,
+        "cancelled_flights": 0,
+        "delay_minutes": 140,
+        "passenger_minutes": 12635,
+        "missed_pax": 0,
+        "cost": 37000,
+        "cost_breakdown": {
+          "delay": 14000,
+          "ferry_flights": 20000,
+          "cancellations": 0,
+          "reserve_crews": 3000
+        }
+      },
+      "details": {
+        "delay_minutes": 140,
+        "ferries": 2,
+        "cancelled": 0,
+        "reserve_crews": 1,
+        "passenger_minutes": 12635,
+        "missed_pax": 0,
+        "cost_breakdown": {
+          "delay": 14000,
+          "ferry_flights": 20000,
+          "cancellations": 0,
+          "reserve_crews": 3000
+        },
+        "crew_buffers": [
+          {
+            "crew": "C01",
+            "report": 710,
+            "release": 1115,
+            "deadline": 1360,
+            "minutes_remaining": 245
+          },
+          {
+            "crew": "C02",
+            "report": 718,
+            "release": 1358,
+            "deadline": 1408,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C03",
+            "report": 726,
+            "release": 1331,
+            "deadline": 1416,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C04",
+            "report": 734,
+            "release": 1339,
+            "deadline": 1424,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C05",
+            "report": 742,
+            "release": 1347,
+            "deadline": 1432,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C06",
+            "report": 750,
+            "release": 1355,
+            "deadline": 1440,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C07",
+            "report": 758,
+            "release": 1398,
+            "deadline": 1448,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C08",
+            "report": 766,
+            "release": 1371,
+            "deadline": 1456,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C09",
+            "report": 774,
+            "release": 1379,
+            "deadline": 1464,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C10",
+            "report": 782,
+            "release": 1387,
+            "deadline": 1472,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "RC01",
+            "report": 1020,
+            "release": 1440,
+            "deadline": 1710,
+            "minutes_remaining": 270
+          }
+        ],
+        "overnight_positions": [
+          {
+            "tail": "T01",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1400,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T02",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T03",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T04",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T05",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T06",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T07",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T08",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T09",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T10",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "R01",
+            "position": "In flight PIT\u2192DTW",
+            "hub": "DTW",
+            "deadline": 1400,
+            "out_of_position": true,
+            "penalty": 20000
+          }
+        ]
+      },
+      "pareto_optimal": true
+    },
+    {
+      "plan": "operations",
+      "feasible": true,
+      "isLegal": true,
+      "scores": {
+        "financial_cost": 37000,
+        "passenger_impact": 305015,
+        "network_health": 0,
+        "crew_buffer": {
+          "hours_remaining": 0.833,
+          "minutes_remaining": 50,
+          "exceeds_by_minutes": 0,
+          "isLegal": true,
+          "scope": "Simplified Part 117-inspired duty model; actual FAA legality is not evaluated."
+        }
+      },
+      "metrics": {
+        "delayed_flights": 2,
+        "cancelled_flights": 2,
+        "delay_minutes": 70,
+        "passenger_minutes": 300015,
+        "missed_pax": 20,
+        "cost": 37000,
+        "cost_breakdown": {
+          "delay": 7000,
+          "ferry_flights": 0,
+          "cancellations": 30000,
+          "reserve_crews": 0
+        }
+      },
+      "details": {
+        "delay_minutes": 70,
+        "ferries": 0,
+        "cancelled": 2,
+        "reserve_crews": 0,
+        "passenger_minutes": 300015,
+        "missed_pax": 20,
+        "cost_breakdown": {
+          "delay": 7000,
+          "ferry_flights": 0,
+          "cancellations": 30000,
+          "reserve_crews": 0
+        },
+        "crew_buffers": [
+          {
+            "crew": "C01",
+            "report": 710,
+            "release": 1115,
+            "deadline": 1360,
+            "minutes_remaining": 245
+          },
+          {
+            "crew": "C02",
+            "report": 718,
+            "release": 1358,
+            "deadline": 1408,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C03",
+            "report": 726,
+            "release": 1331,
+            "deadline": 1416,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C04",
+            "report": 734,
+            "release": 1339,
+            "deadline": 1424,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C05",
+            "report": 742,
+            "release": 1347,
+            "deadline": 1432,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C06",
+            "report": 750,
+            "release": 1355,
+            "deadline": 1440,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C07",
+            "report": 758,
+            "release": 1398,
+            "deadline": 1448,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C08",
+            "report": 766,
+            "release": 1371,
+            "deadline": 1456,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C09",
+            "report": 774,
+            "release": 1379,
+            "deadline": 1464,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C10",
+            "report": 782,
+            "release": 1387,
+            "deadline": 1472,
+            "minutes_remaining": 85
+          }
+        ],
+        "overnight_positions": [
+          {
+            "tail": "T01",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1400,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T02",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T03",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T04",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T05",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T06",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T07",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T08",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T09",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T10",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "R01",
+            "position": "DTW",
+            "hub": "DTW",
+            "deadline": 1400,
+            "out_of_position": false,
+            "penalty": 0
+          }
+        ]
+      },
+      "pareto_optimal": true
     }
   ]
 }

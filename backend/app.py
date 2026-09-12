@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from . import store, agent_workflow as workflow, live_data
-from .simulator import generate, simulate, validate
+from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
 app=FastAPI(title='FlowBetter · IROP Recovery Sandbox')
@@ -23,7 +23,7 @@ lock=threading.RLock()
 @app.middleware('http')
 async def guard(request:Request,call_next):
     origin=request.headers.get('origin')
-    allowed=os.getenv('IROP_ORIGINS','http://127.0.0.1:8010,http://localhost:8010').split(',')
+    allowed=os.getenv('IROP_ORIGINS','http://127.0.0.1:8010,http://localhost:8010,http://127.0.0.1:8011,http://localhost:8011').split(',')
     if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return Response('Cross-origin writes forbidden',status_code=403)
     try:store.set_desk(request.headers.get('x-irop-desk'))
     except ValueError as e:return Response(str(e),status_code=400)
@@ -48,10 +48,13 @@ def get(ident):
 def event(r,action,data):r['events'].append({'created':datetime.now(timezone.utc).isoformat(),'action':action,'data':data})
 def fresh(r,revision):
     if r['revision']!=revision:raise HTTPException(409,'Stale scenario revision. Reload before acting.')
-def digest(o):return hashlib.sha256(json.dumps(o,sort_keys=True).encode()).hexdigest()
+def digest(o):return hashlib.sha256(json.dumps({k:v for k,v in o.items() if k not in ('rank','digest','pareto_optimal','best_for')},sort_keys=True).encode()).hexdigest()
+
+def current_model(r):
+    if r['scenario'].get('model_version')!=MODEL_VERSION:raise HTTPException(409,'Archived model: generate a new scenario to use four-pillar recovery')
 
 @app.get('/api/status')
-def status():return dict(status='ok',desk=store.get_desk(),**workflow.config())
+def status():return dict(status='ok',model_version=MODEL_VERSION,desk=store.get_desk(),**workflow.config())
 @app.get('/api/scenarios')
 def history():return store.list_run_summaries(DATA)
 @app.get('/api/scenarios/{ident}')
@@ -65,7 +68,7 @@ def create(body:Scenario):
 @app.post('/api/scenarios/{ident}/disrupt')
 def disrupt(ident:str,body:Revision):
     with lock:
-        r=get(ident);fresh(r,body.revision)
+        r=get(ident);fresh(r,body.revision);current_model(r)
         if r['phase']!='baseline':raise HTTPException(409,'Disruptions already injected')
         r['disrupted']=simulate(r['scenario']);r['current']=r['disrupted'];r['phase']='disrupted';r['revision']+=1
         event(r,'disruptions_injected',{'disruptions':r['scenario']['disruptions'],'result':r['disrupted']['metrics']});store.save_run(DATA,r);return r
@@ -73,7 +76,7 @@ def disrupt(ident:str,body:Revision):
 def experiment(ident:str,body:Experiment):
     # Single-process local app: serialize state-changing work; provider work is bounded.
     with lock:
-        r=get(ident);fresh(r,body.revision)
+        r=get(ident);fresh(r,body.revision);current_model(r)
         if r['phase']!='disrupted':raise HTTPException(409,'Inject disruptions before evaluating; create a new scenario after approval')
         def persist(report):
             existing=next((i for i,x in enumerate(r['experiments']) if x['id']==report['id']),None)
@@ -88,6 +91,7 @@ def experiment(ident:str,body:Experiment):
 def approve(ident:str,body:Approval):
     with lock:
         r=get(ident)
+        current_model(r)
         def reject(reason,code=409):
             event(r,'approval_rejected',{'reason':reason,'plan':body.plan,'experiment_id':body.experiment_id});store.save_run(DATA,r);raise HTTPException(code,reason)
         if not body.confirm:reject('Explicit simulation approval required',422)
@@ -100,8 +104,7 @@ def approve(ident:str,body:Approval):
         if r.get('live_weather'):
             try:live_data.projected_weather(r['live_weather'])
             except ValueError:reject('Weather basis is stale; refresh and reapply observations before evaluating again')
-        actual=simulate(r['scenario'],body.plan)
-        for e in actual['evidence']:e['id']=body.plan+':'+e['id']
+        actual=scope_evidence(simulate(r['scenario'],body.plan))
         if not actual['feasible'] or digest({k:v for k,v in actual.items() if k!='rank'})!=option['digest']:reject('Verification changed; reevaluate before approval')
         r['current']=actual;r['revision']+=1;r['phase']='recovered'
         event(r,'simulation_approved',{'experiment_id':ex['id'],'plan':body.plan,'from_revision':body.revision,'to_revision':r['revision'],'result':actual['metrics'],'scope':'Simulation only'})
@@ -131,7 +134,7 @@ def observation_fetch(body:ObservationRequest):
 @app.post('/api/scenarios/{ident}/weather-projection')
 def apply_weather(ident:str,body:WeatherProjection):
     with lock:
-        r=get(ident);fresh(r,body.revision)
+        r=get(ident);fresh(r,body.revision);current_model(r)
         try:
             snapshot=live_data.read(store.desk_dir(DATA),body.snapshot_id)
             changes,decisions=live_data.projected_weather(snapshot)

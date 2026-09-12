@@ -11,11 +11,11 @@ def prepared(client):
     r=client.post('/api/scenarios',json={'seed':42}).json();ident=r['id']
     r=client.post(f'/api/scenarios/{ident}/disrupt',json={'revision':0}).json()
     r=client.post(f'/api/scenarios/{ident}/experiments',json={'revision':1}).json()
-    return r,{'revision':1,'experiment_id':r['experiments'][0]['id'],'plan':'protect','confirm':True}
+    return r,{'revision':1,'experiment_id':r['experiments'][0]['id'],'plan':'loyalty','confirm':True}
 
 def test_full_flow_persistence_stale_and_rejected(client):
     r,b=prepared(client);p=f"/api/scenarios/{r['id']}/approve"
-    assert client.post(p,json=dict(b,plan='remote')).status_code==409
+    assert client.post(p,json=dict(b,plan='cfo')).status_code==409
     assert client.post(p,json=dict(b,confirm=False)).status_code==422
     assert client.post(p,json=dict(b,revision=0)).status_code==409
     ok=client.post(p,json=b);assert ok.status_code==200
@@ -49,3 +49,9 @@ def test_live_consent_and_phase(client):
     client.post(path+'/disrupt',json={'revision':0})
     assert client.post(path+'/disrupt',json={'revision':1}).status_code==409
     assert client.post(path+'/experiments',json={'revision':1,'mode':'live','consent':False}).status_code==422
+
+
+def test_archive_readonly(client):
+    r=client.post('/api/scenarios',json={}).json();r['scenario'].pop('model_version');store.save_run(a.DATA,r)
+    assert client.get('/api/scenarios/'+r['id']).status_code==200
+    assert client.post('/api/scenarios/'+r['id']+'/disrupt',json={'revision':0}).status_code==409
