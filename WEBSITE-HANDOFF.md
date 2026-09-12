@@ -12,9 +12,8 @@ The airport-facing website is authored in `dist/`. It uses the existing FlowBett
 - `brand/wordmark.svg`: editable text-based SVG preserving the repo's ✳ identity. Uses Manrope with Arial fallback; not a newly invented logo.
 - `brand/airport-hero-master.png`: original full-resolution generated asset.
 
-For the website alone, run `python3 -m http.server 8024 --bind 127.0.0.1 --directory dist` from this repository and open http://127.0.0.1:8024. This is a static site: no npm build is needed for website edits. The existing React dashboard build script remains available for dashboard edits.
-
-For the complete local simulator, install `requirements.txt` in a virtual environment and run `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8011`. The website adds an Open recovery desk link when a local API is available; the dashboard is at http://127.0.0.1:8011/desk. The hosted static website does not host the Python service or expose simulation writes.
+For the website with live flight data, run `npm run preview:website` and open http://127.0.0.1:8024. Run `npm run build` to produce the Cloudflare Worker and embedded static assets. The preserved React dashboard uses `npm run build:dashboard`.
+For the complete local simulator, install `requirements.txt` in a virtual environment and run `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8011`. The website adds an Open recovery desk link when a local API is available; the dashboard is at http://127.0.0.1:8011/desk. The hosted website does not host the Python service or expose simulation writes.
 
 ## Direction and production decisions
 
@@ -46,3 +45,11 @@ Exact prompt:
 - A standalone Playwright launch was unavailable under the local sandbox; visual QA used the supported in-app browser instead.
 
 The deployed audience is owner-private. GitHub origin is preserved; the website source is pushed to Sites hosting separately, not to the user's GitHub default branch.
+
+## Live flight map
+
+Six airport views: JFK, ATL, ORD, LAX, DFW and LHR. Uses the public ADSB.lol point API through a same-origin server endpoint, with Leaflet 1.9.4 and attributed OpenStreetMap tiles. No API key or Higgsfield credits are used. All valid provider-reported positions within the selected radius are plotted, with search, altitude/speed/heading details, pause, refresh and ground/airborne filters. Nearby aircraft are not classified as arrivals or departures. Community coverage is incomplete.
+
+Refresh is every 15 seconds while visible, subject to provider cooldown. Responses are cached for 15 seconds and concurrent identical requests are deduplicated. Requests are paced within a Worker instance; provider rate limits trigger a shared cooldown. Separate Worker instances cannot coordinate in-memory pacing. Errors show an explicit unavailable state; retained positions are marked stale. Positions over 120 seconds old are excluded; no synthetic live data or extrapolated movement is used.
+
+Edit `dist/flight-map.js`, `dist/flight-map.css`, `dist/flight-data.js` and `server/flight-api.mjs`. `scripts/build-website.mjs` packages the assets and server endpoint into `dist/server/index.js`. The Python local service has an equivalent `/api/flight-map` route. Source and deployment have no credentials.

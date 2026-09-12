@@ -128,6 +128,22 @@ def story_content():return FileResponse(ROOT/'dist/content.js')
 def story_board():return FileResponse(ROOT/'dist/style-tile.html')
 
 app.mount('/assets',StaticFiles(directory=ROOT/'dist/assets'),name='story-assets')
+
+@app.get('/api/flight-map')
+def flight_map_observations(airport:str='JFK',radius:int=100):
+    from .flight_map import snapshot, AIRPORTS
+    if airport not in AIRPORTS or radius not in (25,50,100,150):raise HTTPException(400,'Unsupported airport or radius')
+    from fastapi.responses import JSONResponse
+    try:return JSONResponse(snapshot(airport,radius),headers={'Cache-Control':'no-store'})
+    except ValueError:return JSONResponse({'error':'The live flight feed is temporarily unavailable.','retrySeconds':30},status_code=503,headers={'Retry-After':'30','Cache-Control':'no-store'})
+
+@app.get('/flight-map.js')
+@app.get('/flight-map.css')
+@app.get('/flight-data.js')
+def flight_map_assets(request:Request):return FileResponse(ROOT/'dist'/request.url.path.lstrip('/'))
+
+app.mount('/vendor',StaticFiles(directory=ROOT/'dist/vendor'),name='website-vendor')
+
 app.mount('/static',StaticFiles(directory=ROOT/'frontend'),name='static')
 
 
