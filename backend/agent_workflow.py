@@ -53,7 +53,6 @@ def run(s, revision, mode='local', consent=False, call_model=None, persist=lambd
         if mode=='local':
             event('Tool','inspect_scenario',tool('inspect_scenario',{}))
             for p in PLANS:event('Verifier','simulate_recovery',tool('simulate_recovery',{'plan':p}))
-            report['explanation']='The local fixed plan simulated all three strategies. Four separate scores expose the trade-offs; only plans passing the hard constraints can be approved. There is no single weighted winner. No language model ran.'
         else:
             items=[{'role':'user','content':'Inspect the synthetic scenario, compare recovery options, and explain with evidence citations.'}];calls=0
             for turn in range(6):
@@ -80,6 +79,37 @@ def run(s, revision, mode='local', consent=False, call_model=None, persist=lambd
         report['options']=rank(report['options'])
         report['recommendation']=None
         report['feasible_plans']=[o['plan'] for o in report['options'] if o['feasible']]
+        if mode=='local':
+            lines=[
+                'Airport desk brief (local fixed plan). All three strategies were simulated and independently verified. '
+                'Four pillars stay separate—financial cost, passenger impact, network health, crew buffer—with no single weighted winner. '
+                'No language model ran.'
+            ]
+            for o in report['options']:
+                s=o['scores']; m=o['metrics']; crew=s['crew_buffer']
+                tag='FEASIBLE' if o['feasible'] else 'REJECTED'
+                pareto=' · Pareto trade-off' if o.get('pareto_optimal') else ''
+                best=' · best for '+', '.join(o.get('best_for') or []) if o.get('best_for') else ''
+                fails=[e for e in o.get('evidence',[]) if not e.get('passed')]
+                fail_note=(' Blocked by: '+'; '.join(f"{e['id']} {e.get('kind',e.get('type',''))} — {e.get('detail',e.get('message',''))}" for e in fails[:2])+'.') if fails and not o['feasible'] else ''
+                lines.append(
+                    f"{tag}{pareto}{best} · {o['title']}: ${s['financial_cost']:,} financial · "
+                    f"{s['passenger_impact']:,} passenger pts · {s['network_health']:,} network pts · "
+                    f"crew buffer {crew['minutes_remaining']}m ({'legal' if crew.get('isLegal') else 'illegal'}). "
+                    f"{m['delayed_flights']} delayed / {m['cancelled_flights']} cancelled. {o['description']}{fail_note}"
+                )
+            feasible=report['feasible_plans']
+            if set(feasible)=={'loyalty','operations'}:
+                lines.append(
+                    'Desk guidance: reject CFO when crew buffer fails. Choose Loyalty to protect today’s passengers, '
+                    'or Operations to protect tomorrow’s PIT position—same financial ballpark, opposite passenger vs network trade-off. '
+                    'Human approval still required; simulation only.'
+                )
+            elif feasible:
+                lines.append('Desk guidance: only feasible plans may be approved; pick the pillar trade-off that matches the hub priority. Simulation only.')
+            else:
+                lines.append('Desk guidance: no feasible plan in this run; inspect evidence and revise inputs. Simulation only.')
+            report['explanation']='\n'.join(lines)
         report['status']='completed'
         event('Supervisor','ranked',{'feasible_plans':report['feasible_plans'],'authority':'Four independent pillars + hard constraint verifier','scope':'Human chooses the trade-off; no combined weighted score'})
     except Exception as exc:
