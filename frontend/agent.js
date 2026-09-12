@@ -20,10 +20,12 @@ function renderHubChrome() {
   const hubs = overnightHubsFromState();
   const pit = hubs.PIT || { tails: [] };
   const dtw = hubs.DTW || { tails: [] };
+  const ord = hubs.ORD || { tails: [] };
   const overnight = state.scenario.disruptions.find(d => d.kind === 'overnight');
   $('hubStrip').innerHTML = `
     <div class="hub-chip"><span>Primary overnight</span><strong>PIT · ${pit.tails.length}</strong></div>
     <div class="hub-chip"><span>Spare overnight</span><strong>DTW · ${dtw.tails.join(', ') || '—'}</strong></div>
+    <div class="hub-chip"><span>Spare overnight</span><strong>ORD · ${ord.tails.join(', ') || '—'}</strong></div>
     <div class="hub-chip"><span>Network penalty</span><strong>20,000 / miss</strong></div>
     <div class="hub-chip"><span>Overnight pressure</span><strong>${overnight ? overnight.id : 'None yet'}</strong></div>`;
   if ($('overnightFacts')) {
@@ -33,8 +35,9 @@ function renderHubChrome() {
       <div class="overnight-grid">
         <div><span class="label">PIT overnight tails</span><strong>${pit.tails.length}</strong><small>${pit.tails.join(' · ')}</small></div>
         <div><span class="label">DTW spare base</span><strong>${dtw.tails.join(', ') || '—'}</strong><small>Loyalty ferries from here</small></div>
+        <div><span class="label">ORD spare base</span><strong>${ord.tails.join(', ') || '—'}</strong><small>Second spoke spare pool</small></div>
         <div><span class="label">Viewed out of position</span><strong>${oop.length ? oop.map(p => p.tail).join(', ') : 'None'}</strong><small>${oop.length ? oop.map(p => `${p.tail} @ ${esc(p.position)}`).join(' · ') : 'All hubs covered at cutoff'}</small></div>
-        <div><span class="label">Tightened cutoff</span><strong>${overnight ? hh(overnight.deadline) : '—'}</strong><small>${overnight ? esc(overnight.label) : 'Inject disruptions to activate D4'}</small></div>
+        <div><span class="label">Tightened cutoff</span><strong>${overnight ? hh(overnight.deadline) : '—'}</strong><small>${overnight ? esc(overnight.label) : 'Inject disruptions to activate overnight pressure'}</small></div>
       </div>`;
   }
 }
@@ -55,7 +58,7 @@ function paintNetwork() {
     const label = isHub ? 'OVERNIGHT HUB' : overnightCount ? `${overnightCount} overnight` : 'spoke';
     return `<g class="node ${hit ? 'focus' : ''} ${isHub ? 'hub' : ''}" data-airport="${a}">
       ${isHub ? `<circle cx="${p.x}" cy="${p.y}" r="34" class="hub-ring"/>` : ''}
-      ${a === 'DTW' ? `<circle cx="${p.x}" cy="${p.y}" r="20" class="spare-ring"/>` : ''}
+      ${a === 'DTW' || a === 'ORD' ? `<circle cx="${p.x}" cy="${p.y}" r="20" class="spare-ring"/>` : ''}
       <circle cx="${p.x}" cy="${p.y}" r="${isHub ? 23 : 14}" class="pad"/>
       <circle cx="${p.x}" cy="${p.y}" r="${isHub ? 9 : 5}" class="core ${wx ? 'wx' : ''}" ${live?.[a] ? `style="fill:${live[a].color}"` : ''}/>
       <text x="${p.x}" y="${p.y + 36}" text-anchor="middle" font-weight="700">${a}</text>

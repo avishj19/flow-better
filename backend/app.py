@@ -7,7 +7,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, List
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from . import store, agent_workflow as workflow, live_data, virtual_agent, analysis_agent, auth
 from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION, network_snapshot, PROFILES
 from . import decade_data
+from . import disruption_catalog
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
 app=FastAPI(title='FlowBetter · IROP Recovery Sandbox')
@@ -48,6 +49,9 @@ class Strict(BaseModel):model_config=ConfigDict(extra='forbid')
 class Scenario(Strict):
     seed:int=Field(default=42,ge=0,le=999999,strict=True)
     profile:Literal['default','snowzilla_ne','ord_winter']='default'
+class ScenarioFromIssues(Strict):
+    seed:int=Field(default=42,ge=0,le=999999,strict=True)
+    issue_ids:List[str]=Field(default_factory=list)
 class Revision(Strict):revision:int=Field(ge=0,strict=True)
 class Experiment(Revision):
     mode:Literal['local','live']='local'
@@ -145,6 +149,23 @@ def scenario_network(ident:str):
 @app.post('/api/scenarios/{ident}/agent')
 def scenario_agent(ident:str,body:AgentChat):
     return virtual_agent.respond(get(ident),body.message)
+@app.get('/api/disruption-issues')
+def disruption_issues():
+    return disruption_catalog.catalog()
+@app.post('/api/scenarios/from-issues')
+def create_from_issues(body:ScenarioFromIssues):
+    if len(body.issue_ids)>disruption_catalog.MAX_ISSUES:
+        raise HTTPException(400,f'Select at most {disruption_catalog.MAX_ISSUES} issues')
+    try:
+        s=generate(body.seed, 'default')
+        disruption_catalog.apply_issues(s, body.issue_ids)
+    except ValueError as e:
+        raise HTTPException(400,str(e))
+    baseline=simulate(s,disrupted=False)
+    if not baseline['feasible']:raise HTTPException(422,'Generated baseline failed validation')
+    ids=','.join(body.issue_ids) if body.issue_ids else 'none'
+    r={'id':uuid.uuid4().hex,'name':f'PIT overnight hub · custom · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'profile':'custom','issue_ids':list(body.issue_ids),'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
+    event(r,'scenario_generated',{'seed':body.seed,'issue_ids':body.issue_ids,'flights':len(s['flights']),'disruptions':len(s['disruptions'])});store.save_run(DATA,r);return r
 @app.post('/api/scenarios')
 def create(body:Scenario):
     s=generate(body.seed, body.profile); baseline=simulate(s,disrupted=False)

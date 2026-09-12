@@ -107,8 +107,13 @@ def generate(seed=42, profile='default'):
             spoke=list(AIRPORTS)[1:][(i+leg//2)%5]
             if i==0 and leg>=4:spoke='ORD'
             flights.append({'id':f'RX{100+i*6+leg}','rotation':i+1,'leg':leg,'origin':'PIT' if leg%2==0 else spoke,'destination':spoke if leg%2==0 else 'PIT','dep':start+leg*100,'arr':start+leg*100+60,'tail':tid,'crew':cid,'pax':rng.randint(85,140),'ferry':False})
+    # Spare pool: 3 aircraft + 3 reserve crews at two spoke bases (DTW + ORD).
     tails['R01']={'position':'DTW','ready':1050,'capacity':150,'type':'RJ','overnight_hub':'DTW','overnight_by':1400}
+    tails['R02']={'position':'DTW','ready':1050,'capacity':150,'type':'RJ','overnight_hub':'DTW','overnight_by':1400}
+    tails['R03']={'position':'ORD','ready':1050,'capacity':150,'type':'RJ','overnight_hub':'ORD','overnight_by':1400}
     crews['RC01']={'position':'DTW','ready':1050,'report':1020,'rest':720,'type':'RJ','max_duty':690}
+    crews['RC02']={'position':'DTW','ready':1050,'report':1020,'rest':720,'type':'RJ','max_duty':690}
+    crews['RC03']={'position':'ORD','ready':1050,'report':1020,'rest':720,'type':'RJ','max_duty':690}
     connections=[]
     for leg in (1,3):
         for i in range(10):
@@ -145,7 +150,7 @@ def generate(seed=42, profile='default'):
             'bts_storm_profile': storm_spec if profile != 'default' else None,
             'hub':HUB,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),
             'airports':{a:{'x':p[0],'y':p[1],'gates':4 if a==HUB else 2,'role':'hub' if a==HUB else 'spoke',
-                          'overnight_role':'primary' if a==HUB else ('spare_base' if a=='DTW' else 'spoke')} for a,p in AIRPORTS.items()}}
+                          'overnight_role':'primary' if a==HUB else ('spare_base' if a in ('DTW','ORD') else 'spoke')} for a,p in AIRPORTS.items()}}
 
 
 def _profile_weather(profile):

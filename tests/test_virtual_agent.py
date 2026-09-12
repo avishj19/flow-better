@@ -4,9 +4,10 @@ from backend import virtual_agent as va
 def test_network_snapshot_overnight_hubs():
     s=generate(42); net=network_snapshot(s)
     assert net['hub']==HUB=='PIT'
-    assert set(net['overnight_hubs'])=={'PIT','DTW'}
+    assert set(net['overnight_hubs'])=={'PIT','DTW','ORD'}
     assert net['overnight_hubs']['PIT']['count']==10
-    assert net['overnight_hubs']['DTW']['tails']==['R01']
+    assert net['overnight_hubs']['DTW']['tails']==['R01','R02']
+    assert net['overnight_hubs']['ORD']['tails']==['R03']
     assert net['overnight_disruption']['id']=='D4'
     disrupted=simulate(s)
     viewed=network_snapshot(s, disrupted)

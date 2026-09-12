@@ -63,7 +63,8 @@ def test_virtual_agent_and_network_endpoints(client):
     assert r['name'].startswith('PIT overnight hub')
     assert client.get('/api/status').json()['virtual_agent'] is True
     net=client.get(f"/api/scenarios/{r['id']}/network").json()
-    assert net['hub']=='PIT' and net['overnight_hubs']['DTW']['tails']==['R01']
+    assert net['hub']=='PIT' and net['overnight_hubs']['DTW']['tails']==['R01','R02']
+    assert net['overnight_hubs']['ORD']['tails']==['R03']
     chat=client.post(f"/api/scenarios/{r['id']}/agent",json={'message':'Brief the overnight hubs'}).json()
     assert chat['topic']=='overnight_hub' and 'PIT' in chat['highlights']
     assert client.post(f"/api/scenarios/{r['id']}/agent",json={'message':''}).status_code==422
