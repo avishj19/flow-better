@@ -14,7 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from . import store, agent_workflow as workflow, live_data, virtual_agent, analysis_agent, auth
-from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION, network_snapshot
+from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION, network_snapshot, PROFILES
+from . import decade_data
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
 app=FastAPI(title='FlowBetter · IROP Recovery Sandbox')
@@ -99,6 +100,29 @@ def agent_starters():return {'prompts':virtual_agent.starter_prompts(),'scope':'
 def analysis_status():return analysis_agent.config()
 @app.get('/api/analysis/starters')
 def analysis_starters():return {'prompts':analysis_agent.starter_prompts(),'scope':analysis_agent.config()['scope']}
+@app.get('/api/storm-profiles')
+def storm_profiles():
+    """BTS-backed teaching storm profiles (cancel counts / delay minutes from the decade pack)."""
+    try:
+        payload = decade_data.storm_profiles_payload()
+    except Exception as e:
+        raise HTTPException(503, f'Decade storm pack unavailable: {e}')
+    return {
+        **payload,
+        'available_profiles': list(PROFILES),
+        'pack_available': decade_data.available(),
+        'pack_dir': decade_data.catalog()['pack_dir'] if decade_data.available() else None,
+    }
+@app.get('/api/storm-profiles/{profile}')
+def storm_profile_detail(profile: str):
+    if profile not in PROFILES:
+        raise HTTPException(404, 'Unknown disruption profile')
+    try:
+        return decade_data.storm_profile_spec(profile)
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 @app.post('/api/analysis/ask')
 def analysis_ask(body:AnalysisAsk):
     disruptions=None
@@ -214,6 +238,9 @@ app.mount('/vendor',StaticFiles(directory=ROOT/'dist/vendor'),name='website-vend
 def workspace_assets(request:Request):return FileResponse(ROOT/'dist'/request.url.path.lstrip('/'))
 
 app.mount('/static',StaticFiles(directory=ROOT/'frontend'),name='static')
+# Public decade CSV/JSON pack (source of truth under docs/airport-decade-dataset/).
+if (ROOT/'docs'/'airport-decade-dataset').is_dir():
+    app.mount('/dataset',StaticFiles(directory=ROOT/'docs'/'airport-decade-dataset'),name='airport-decade-dataset')
 
 
 observation_lock=threading.Lock()

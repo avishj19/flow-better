@@ -117,35 +117,59 @@ def generate(seed=42, profile='default'):
                 connections.append({'id':f'CN{len(connections)+1:02}','inbound':inbound['id'],'outbound':outbound['id'],'pax':rng.randint(12,28)})
     # A real consequence of the final outbound cancellation: a protected inbound connection.
     connections.append({'id':'CN17','inbound':'RX103','outbound':'RX104','pax':20})
-    signals=[{'id':'SIG-ORD-01','source':'Synthetic Slack message · ORD Ground Ops','text':"Unstructured Input: Slack message from ORD Ground Ops: 'De-icing trucks are backed up, add 45 mins to any gate turnaround.'",'start':1140,'end':1320}]
+    storm_spec, weather = _profile_weather(profile)
+    extra_turn = 45
+    if storm_spec and storm_spec.get('ground_ops_extra_turn_minutes'):
+        extra_turn = int(storm_spec['ground_ops_extra_turn_minutes'])
+    signals=[{'id':'SIG-ORD-01','source':'Synthetic Slack message · ORD Ground Ops',
+              'text':f"Unstructured Input: Slack message from ORD Ground Ops: 'De-icing trucks are backed up, add {extra_turn} mins to any gate turnaround.'",
+              'start':1140,'end':1320}]
+    ground_label = f'ORD de-icing backlog · ground-ops text adds {extra_turn}m to each affected turnaround'
+    if profile == 'ord_winter' and storm_spec and storm_spec.get('ground_ops_source'):
+        src = storm_spec['ground_ops_source']
+        ground_label += (
+            f" · sized from BTS ORD {src['date']} avg dep delay {src.get('avg_dep_delay')}m "
+            f"/ late-aircraft {int(src.get('late_aircraft_delay_min') or 0):,}m"
+        )
     disruptions=[
         {'id':'D1','kind':'mechanical','resource':'T01','flight_id':'RX104','until':1245,'label':'Maintenance delay · T01 released at 20:45, 105m after RX104’s planned departure'},
-        {'id':'D2','kind':'ground_ops','airport':'ORD','signal_id':'SIG-ORD-01','label':'ORD de-icing backlog · ground-ops text adds 45m to each affected turnaround'},
+        {'id':'D2','kind':'ground_ops','airport':'ORD','signal_id':'SIG-ORD-01','label':ground_label},
         {'id':'D3','kind':'crew_limit','resource':'C01','max_duty':650,'label':'Crew availability update · C01 has only 45m buffer beyond its original final release'},
         {'id':'D4','kind':'overnight','resource':'T01','deadline':1400,'label':'Overnight slot change · T01 must be at PIT by 23:20 to protect tomorrow’s first rotation'},
     ]
-    disruptions.extend(_profile_weather(profile))
-    return {'model_version':MODEL_VERSION,'seed':seed,'profile':profile,'profile_note':PROFILES[profile],'hub':HUB,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),
+    disruptions.extend(weather)
+    note = PROFILES[profile]
+    if storm_spec and storm_spec.get('note'):
+        note = storm_spec['note']
+    return {'model_version':MODEL_VERSION,'seed':seed,'profile':profile,'profile_note':note,
+            'bts_storm_profile': storm_spec if profile != 'default' else None,
+            'hub':HUB,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),
             'airports':{a:{'x':p[0],'y':p[1],'gates':4 if a==HUB else 2,'role':'hub' if a==HUB else 'spoke',
                           'overnight_role':'primary' if a==HUB else ('spare_base' if a=='DTW' else 'spoke')} for a,p in AIRPORTS.items()}}
 
 
 def _profile_weather(profile):
-    """Synthetic weather windows sized from BTS major-cancel days; not official FAA closures."""
-    if profile=='snowzilla_ne':
-        # Inspired by JFK/DCA/BOS cancel rates ≥67–100% on 2016-01-23/24 and 2022-01-29 (BTS PREZIP).
-        return [
-            {'id':'WX-JFK','kind':'weather','airport':'JFK','start':1080,'end':1320,'label':'JFK winter closure · synthetic 18:00–22:00 (Snowzilla-NE teaching pack)'},
-            {'id':'WX-DCA','kind':'weather','airport':'DCA','start':1080,'end':1320,'label':'DCA winter closure · synthetic 18:00–22:00 (Snowzilla-NE teaching pack)'},
-            {'id':'WX-BOS','kind':'weather','airport':'BOS','start':1100,'end':1340,'label':'BOS winter closure · synthetic 18:20–22:20 (Snowzilla-NE teaching pack)'},
-        ]
-    if profile=='ord_winter':
-        # Inspired by ORD 2019-01-28/30 and 2024-01-12 BTS cancel+weather/late-aircraft spikes.
-        return [
-            {'id':'WX-ORD','kind':'weather','airport':'ORD','start':1120,'end':1360,'label':'ORD winter movement restriction · synthetic 18:40–22:40 (ORD-winter teaching pack)'},
-            {'id':'WX-DTW','kind':'weather','airport':'DTW','start':1140,'end':1260,'label':'DTW winter spillover · synthetic 19:00–21:00 (ORD-winter teaching pack)'},
-        ]
-    return []
+    """Weather holds sized from packed BTS PREZIP flaw-day cancel/delay minutes (docs/airport-decade-dataset)."""
+    if profile == 'default':
+        return None, []
+    try:
+        from . import decade_data
+        spec = decade_data.storm_profile_spec(profile)
+        return spec, decade_data.weather_disruptions_for_profile(profile)
+    except Exception:
+        # Fail closed to static teaching windows if the pack is missing (keeps sandbox bootable).
+        if profile == 'snowzilla_ne':
+            return {'id': profile, 'note': PROFILES[profile], 'airports': []}, [
+                {'id':'WX-JFK','kind':'weather','airport':'JFK','start':1080,'end':1320,'label':'JFK winter closure · synthetic 18:00–22:00 (Snowzilla-NE fallback)'},
+                {'id':'WX-DCA','kind':'weather','airport':'DCA','start':1080,'end':1320,'label':'DCA winter closure · synthetic 18:00–22:00 (Snowzilla-NE fallback)'},
+                {'id':'WX-BOS','kind':'weather','airport':'BOS','start':1100,'end':1340,'label':'BOS winter closure · synthetic 18:20–22:20 (Snowzilla-NE fallback)'},
+            ]
+        if profile == 'ord_winter':
+            return {'id': profile, 'note': PROFILES[profile], 'airports': []}, [
+                {'id':'WX-ORD','kind':'weather','airport':'ORD','start':1120,'end':1360,'label':'ORD winter movement restriction · synthetic 18:40–22:40 (ORD-winter fallback)'},
+                {'id':'WX-DTW','kind':'weather','airport':'DTW','start':1140,'end':1260,'label':'DTW winter spillover · synthetic 19:00–21:00 (ORD-winter fallback)'},
+            ]
+        return None, []
 
 def parse_signals(s,disrupted=True):
     """Narrow, deterministic extraction, not an LLM or general Slack understanding."""

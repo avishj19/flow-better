@@ -1,10 +1,15 @@
 """On-disk decade pack for FlowBetter's six airports (official public sources)."""
 from __future__ import annotations
 import csv
+import json
 from functools import lru_cache
 from pathlib import Path
 
-PACK = Path(__file__).resolve().parent / 'decade_pack'
+_ROOT = Path(__file__).resolve().parents[1]
+_DOCS_PACK = _ROOT / 'docs' / 'airport-decade-dataset'
+_LEGACY_PACK = Path(__file__).resolve().parent / 'decade_pack'
+# Prefer the project docs path (source of truth); fall back to backend/decade_pack.
+PACK = _DOCS_PACK if (_DOCS_PACK / 'major_flaw_days.csv').is_file() else _LEGACY_PACK
 AIRPORTS = ('PIT', 'BOS', 'JFK', 'DCA', 'ORD', 'DTW')
 SCOPE = (
     'Official public BTS / FAA / NOAA aggregates for PIT,BOS,JFK,DCA,ORD,DTW · '
@@ -25,6 +30,19 @@ FILES = {
     'enplanements': 'faa_enplanements.csv',
     'daily': 'bts_daily_airport_metrics.csv',
     'stations': 'noaa_station_crosswalk.csv',
+}
+
+# BTS PREZIP flaw-day anchors used to size teaching storm profiles (not carrier replays).
+STORM_PROFILE_ANCHORS = {
+    'snowzilla_ne': (
+        ('JFK', '2022-01-29', 1080),
+        ('DCA', '2022-01-03', 1080),
+        ('BOS', '2019-01-20', 1100),
+    ),
+    'ord_winter': (
+        ('ORD', '2019-01-28', 1120),
+        ('DTW', '2024-01-12', 1140),
+    ),
 }
 
 
@@ -86,7 +104,151 @@ def catalog():
         },
         'scope': SCOPE,
         'pack_dir': str(PACK),
+        'storm_profiles': str(PACK / 'storm_profiles.json'),
     }
+
+
+def _flaw_day(airport: str, date: str) -> dict:
+    for r in _rows('flaw_days'):
+        if r.get('airport') == airport and r.get('date') == date:
+            return dict(r)
+    raise FileNotFoundError(f'No packed flaw day for {airport} on {date}')
+
+
+def hold_minutes_from_bts(row: dict, start_prefer: int = 1080) -> tuple[int, int, int]:
+    """Synthetic evening-bank hold sized from packed cancel rate + avg departure delay.
+
+    Floor 180m so Operations storm-bank cancel engages; cap 240m so the one-day
+    sandbox still has a feasible cancel-first Operations answer on multi-airport storms.
+    Packed BTS cancel counts / delay minutes are preserved on the disruption evidence —
+    only the synthetic hold length is capped for the teaching model.
+    """
+    cancel = float(row.get('dep_cancel_rate') or 0)
+    avg = float(row.get('avg_dep_delay') or 0)
+    duration = 180 + int(round(min(1.0, cancel) * 60))
+    if avg > 0:
+        duration += min(20, int(avg // 6))
+    duration = max(180, min(240, duration))
+    start = int(start_prefer)
+    return start, start + duration, duration
+
+
+@lru_cache(maxsize=4)
+def storm_profiles_payload() -> dict:
+    """Return storm_profiles.json, building from CSV anchors if the file is absent."""
+    path = PACK / 'storm_profiles.json'
+    if path.is_file():
+        return json.loads(path.read_text(encoding='utf-8'))
+    return {'scope': SCOPE, 'source_of_truth': str(PACK / FILES['flaw_days']),
+            'profiles': {k: storm_profile_spec(k) for k in ('default', 'snowzilla_ne', 'ord_winter')}}
+
+
+def storm_profile_spec(profile: str) -> dict:
+    """BTS-backed teaching pack for a scenario profile (metrics from major_flaw_days.csv)."""
+    if profile == 'default':
+        return {
+            'id': 'default',
+            'note': 'Standard seed disruptions (maintenance, ORD de-icing signal, crew limit, overnight).',
+            'airports': [],
+            'bts_anchor_days': [],
+        }
+    if profile not in STORM_PROFILE_ANCHORS:
+        raise ValueError(f'Unknown storm profile {profile}')
+    airports = []
+    anchors = []
+    for airport, date, start_pref in STORM_PROFILE_ANCHORS[profile]:
+        row = _flaw_day(airport, date)
+        start, end, duration = hold_minutes_from_bts(row, start_pref)
+        anchors.append({
+            'airport': airport,
+            'date': date,
+            'dep_flights': row.get('dep_flights'),
+            'dep_cancelled': row.get('dep_cancelled'),
+            'dep_cancel_rate': row.get('dep_cancel_rate'),
+            'dep_delay15_rate': row.get('dep_delay15_rate'),
+            'avg_dep_delay': row.get('avg_dep_delay'),
+            'weather_delay_min': row.get('weather_delay_min') or 0,
+            'late_aircraft_delay_min': row.get('late_aircraft_delay_min') or 0,
+            'disruption_score': row.get('disruption_score'),
+            'source': 'BTS PREZIP · major_flaw_days.csv',
+        })
+        airports.append({
+            **anchors[-1],
+            'hold_start': start,
+            'hold_end': end,
+            'hold_minutes': duration,
+            'hold_rule': 'teaching_mock_from_bts_cancel_rate_and_avg_dep_delay',
+        })
+    out = {
+        'id': profile,
+        'note': (
+            'Northeast winter stop sized from BTS PREZIP flaw days.'
+            if profile == 'snowzilla_ne'
+            else 'ORD-centered winter cascade sized from BTS PREZIP cancel + weather/late-aircraft minutes.'
+        ),
+        'pattern': PATTERN_SNOWZILLA if profile == 'snowzilla_ne' else PATTERN_ORD_WINTER,
+        'bts_anchor_days': anchors,
+        'airports': airports,
+    }
+    if profile == 'ord_winter':
+        ord_row = anchors[0]
+        avg = float(ord_row.get('avg_dep_delay') or 45)
+        extra = max(45, min(90, int(round(avg / 2))))
+        out['ground_ops_extra_turn_minutes'] = extra
+        out['ground_ops_source'] = {
+            'airport': 'ORD',
+            'date': ord_row['date'],
+            'avg_dep_delay': ord_row.get('avg_dep_delay'),
+            'late_aircraft_delay_min': ord_row.get('late_aircraft_delay_min'),
+            'weather_delay_min': ord_row.get('weather_delay_min'),
+            'rule': 'extra_turn = clamp(45,90, round(avg_dep_delay/2)) from BTS ORD flaw day',
+        }
+    return out
+
+
+def weather_disruptions_for_profile(profile: str) -> list[dict]:
+    """Weather disruption objects for simulator.generate — labels cite packed BTS numbers."""
+    if profile == 'default':
+        return []
+    spec = storm_profile_spec(profile)
+    pack_name = 'Snowzilla-NE' if profile == 'snowzilla_ne' else 'ORD-winter'
+    out = []
+    for a in spec['airports']:
+        cancel_pct = round(100 * float(a['dep_cancel_rate']), 1)
+        wx = int(a.get('weather_delay_min') or 0)
+        late = int(a.get('late_aircraft_delay_min') or 0)
+        avg = a.get('avg_dep_delay')
+        avg_txt = f'{avg:.0f}m avg dep delay' if avg is not None else 'avg dep delay n/a'
+        label = (
+            f"{a['airport']} winter hold · synthetic {_hhmm(a['hold_start'])}–{_hhmm(a['hold_end'])} "
+            f"({pack_name} teaching pack) · BTS {a['date']}: "
+            f"{int(a['dep_cancelled'])}/{int(a['dep_flights'])} deps cancelled ({cancel_pct}%), "
+            f"{wx:,} weather-delay min, {late:,} late-aircraft min, {avg_txt}"
+        )
+        out.append({
+            'id': f"WX-{a['airport']}",
+            'kind': 'weather',
+            'airport': a['airport'],
+            'start': int(a['hold_start']),
+            'end': int(a['hold_end']),
+            'label': label,
+            'bts_source': {
+                'date': a['date'],
+                'dep_flights': a['dep_flights'],
+                'dep_cancelled': a['dep_cancelled'],
+                'dep_cancel_rate': a['dep_cancel_rate'],
+                'weather_delay_min': a.get('weather_delay_min') or 0,
+                'late_aircraft_delay_min': a.get('late_aircraft_delay_min') or 0,
+                'avg_dep_delay': a.get('avg_dep_delay'),
+                'file': 'docs/airport-decade-dataset/major_flaw_days.csv',
+            },
+        })
+    return out
+
+
+def _hhmm(minutes: int) -> str:
+    minutes = int(minutes) % 1440
+    return f'{minutes // 60:02d}:{minutes % 60:02d}'
 
 
 def _airport(code: str | None):

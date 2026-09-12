@@ -34,6 +34,35 @@ def test_historical_profiles_run_without_horizon_exhaustion(profile):
         assert ops['scores']['network_health']==0
         assert not options['cfo']['feasible']
 
+def test_storm_profiles_cite_bts_flaw_day_metrics():
+    """snowzilla_ne / ord_winter must pull cancel counts + delay minutes from the packed CSVs."""
+    from backend import decade_data
+    snow=generate(42,'snowzilla_ne')
+    assert snow['bts_storm_profile']
+    wx=[d for d in snow['disruptions'] if d['kind']=='weather']
+    assert {d['airport'] for d in wx}=={'JFK','DCA','BOS'}
+    jfk=next(d for d in wx if d['airport']=='JFK')
+    assert jfk['bts_source']['date']=='2022-01-29'
+    assert jfk['bts_source']['dep_flights']==355
+    assert jfk['bts_source']['dep_cancelled']==334
+    assert jfk['bts_source']['weather_delay_min']==2528.0
+    assert jfk['end']-jfk['start']>=180
+    assert '334/355' in jfk['label']
+    # Hold duration is derived from packed cancel rate / avg delay (not a free-floating constant).
+    packed=decade_data.storm_profile_spec('snowzilla_ne')
+    assert jfk['end']-jfk['start']==next(a['hold_minutes'] for a in packed['airports'] if a['airport']=='JFK')
+
+    ord_s=generate(42,'ord_winter')
+    ord_wx=next(d for d in ord_s['disruptions'] if d.get('airport')=='ORD' and d['kind']=='weather')
+    assert ord_wx['bts_source']['date']=='2019-01-28'
+    assert ord_wx['bts_source']['dep_cancelled']==463
+    assert ord_wx['bts_source']['weather_delay_min']==11412.0
+    assert ord_wx['bts_source']['late_aircraft_delay_min']==26286.0
+    # ORD winter bumps de-icing turn minutes from packed avg dep delay.
+    assert 'add 57 mins' in ord_s['unstructured_signals'][0]['text']
+    assert decade_data.available()
+    assert 'docs/airport-decade-dataset' in decade_data.catalog()['pack_dir'].replace('\\','/')
+
 def test_three_actual_tradeoffs():
     s=generate();cfo,loyalty,ops=rank([simulate(s,p) for p in PLANS])
     assert cfo['scores']['financial_cost']==31500
