@@ -6,6 +6,16 @@ Ground-ops issues also ensure a matching unstructured signal exists.
 
 MAX_ISSUES = 4
 
+# Preset pack(s) the desk can pick; each list is ≤ MAX_ISSUES catalog ids.
+ISSUE_PROFILES = {
+    'mechanical': {
+        'id': 'mechanical',
+        'label': 'Mechanical',
+        'description': 'Aircraft mechanical holds — maintenance slips on T01/T05 plus a grounded DTW spare.',
+        'issue_ids': ['mech_t01', 'mech_t05', 'spare_unavailable'],
+    },
+}
+
 
 def _mech_t01(_s):
     return {
@@ -206,7 +216,22 @@ def catalog():
             {'id': i['id'], 'label': i['label'], 'description': i['description']}
             for i in ISSUES.values()
         ],
+        'profiles': [
+            {
+                'id': p['id'],
+                'label': p['label'],
+                'description': p['description'],
+                'issue_ids': list(p['issue_ids']),
+            }
+            for p in ISSUE_PROFILES.values()
+        ],
     }
+
+
+def resolve_profile(profile_id):
+    if profile_id not in ISSUE_PROFILES:
+        raise ValueError(f'Unknown issue profile: {profile_id}')
+    return list(ISSUE_PROFILES[profile_id]['issue_ids'])
 
 
 def resolve(issue_ids):
@@ -222,7 +247,7 @@ def resolve(issue_ids):
     return [ISSUES[i] for i in issue_ids]
 
 
-def apply_issues(scenario, issue_ids):
+def apply_issues(scenario, issue_ids, profile_id=None):
     """Replace hard-coded disruptions with those built from the selected catalog ids."""
     selected = resolve(issue_ids)
     scenario['disruptions'] = []
@@ -230,6 +255,11 @@ def apply_issues(scenario, issue_ids):
     for issue in selected:
         scenario['disruptions'].append(issue['build'](scenario))
     scenario['issue_ids'] = list(issue_ids)
-    scenario['profile'] = 'custom'
-    scenario['profile_note'] = f'Custom desk selection · {len(issue_ids)} of {MAX_ISSUES} max issues'
+    if profile_id and profile_id in ISSUE_PROFILES:
+        pack = ISSUE_PROFILES[profile_id]
+        scenario['profile'] = profile_id
+        scenario['profile_note'] = f"{pack['label']} pack · {len(issue_ids)} of {MAX_ISSUES} max issues"
+    else:
+        scenario['profile'] = 'custom'
+        scenario['profile_note'] = f'Custom desk selection · {len(issue_ids)} of {MAX_ISSUES} max issues'
     return scenario

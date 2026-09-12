@@ -3,7 +3,9 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 from backend import app as a
-from backend.disruption_catalog import MAX_ISSUES, catalog, apply_issues, resolve, ISSUES
+from backend.disruption_catalog import (
+    MAX_ISSUES, catalog, apply_issues, resolve, resolve_profile, ISSUES, ISSUE_PROFILES,
+)
 from backend.simulator import generate, simulate, rank, PLANS
 
 
@@ -12,6 +14,17 @@ def test_catalog_has_exactly_ten_issues():
     assert payload['max_select'] == MAX_ISSUES == 4
     assert len(payload['issues']) == 10 == len(ISSUES)
     assert {i['id'] for i in payload['issues']} == set(ISSUES)
+
+
+def test_catalog_exposes_mechanical_profile_only():
+    payload = catalog()
+    assert list(ISSUE_PROFILES) == ['mechanical']
+    assert {p['id'] for p in payload['profiles']} == {'mechanical'}
+    assert resolve_profile('mechanical') == ISSUE_PROFILES['mechanical']['issue_ids']
+    assert set(resolve_profile('mechanical')) <= set(ISSUES)
+    s = apply_issues(generate(42), resolve_profile('mechanical'), profile_id='mechanical')
+    assert s['profile'] == 'mechanical'
+    assert {d['kind'] for d in s['disruptions']} == {'mechanical'}
 
 
 def test_resolve_rejects_more_than_four():
@@ -94,6 +107,7 @@ def test_from_issues_endpoint_creates_scenario(client):
     catalog_r = client.get('/api/disruption-issues')
     assert catalog_r.status_code == 200
     assert len(catalog_r.json()['issues']) == 10
+    assert {p['id'] for p in catalog_r.json()['profiles']} == {'mechanical'}
     r = client.post('/api/scenarios/from-issues', json={
         'seed': 42,
         'issue_ids': ['mech_t01', 'wx_ord', 'crew_c01', 'overnight_early'],
@@ -105,3 +119,12 @@ def test_from_issues_endpoint_creates_scenario(client):
     assert len(body['scenario']['disruptions']) == 4
     disrupted = client.post(f"/api/scenarios/{body['id']}/disrupt", json={'revision': 0})
     assert disrupted.status_code == 200
+
+
+def test_from_issues_mechanical_profile(client):
+    r = client.post('/api/scenarios/from-issues', json={'seed': 42, 'profile': 'mechanical'})
+    assert r.status_code == 200
+    body = r.json()
+    assert body['profile'] == 'mechanical'
+    assert body['issue_ids'] == ISSUE_PROFILES['mechanical']['issue_ids']
+    assert {d['kind'] for d in body['scenario']['disruptions']} == {'mechanical'}

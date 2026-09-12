@@ -132,16 +132,48 @@ async function loadHistory() {
 function selectedIssueIds() {
   return [...document.querySelectorAll('#issueList input[type=checkbox]:checked')].map(el=>el.value);
 }
-function syncIssuePicker() {
+let issueProfiles=[];
+let activeIssueProfile=null;
+function syncIssuePicker(fromManual=true) {
   const boxes=[...document.querySelectorAll('#issueList input[type=checkbox]')];
   const selected=boxes.filter(b=>b.checked);
   const max=Number($('issueList')?.dataset.max||4);
   $('issueCount').textContent=`${selected.length} / ${max} selected`;
   boxes.forEach(b=>{b.disabled=!b.checked&&selected.length>=max;});
+  if(fromManual){
+    const ids=new Set(selected.map(b=>b.value));
+    const match=issueProfiles.find(p=>p.issue_ids.length===ids.size&&p.issue_ids.every(id=>ids.has(id)));
+    activeIssueProfile=match?.id||null;
+    renderIssueProfiles();
+  }
+}
+function applyIssueProfile(profileId) {
+  const pack=issueProfiles.find(p=>p.id===profileId);
+  if(!pack) return;
+  activeIssueProfile=profileId;
+  const want=new Set(pack.issue_ids);
+  document.querySelectorAll('#issueList input[type=checkbox]').forEach(box=>{box.checked=want.has(box.value);});
+  syncIssuePicker(false);
+  renderIssueProfiles();
+  message(`${pack.label} profile selected · ${pack.issue_ids.length} issues pre-filled. Generate to apply.`);
+}
+function renderIssueProfiles() {
+  const host=$('issueProfiles');
+  if(!host) return;
+  if(!issueProfiles.length){host.innerHTML='';return;}
+  host.innerHTML=issueProfiles.map(p=>`
+    <button type="button" class="profile-pack ${activeIssueProfile===p.id?'active':''}" data-profile="${esc(p.id)}" aria-pressed="${activeIssueProfile===p.id}">
+      <strong>${esc(p.label)} profile</strong>
+      <small>${esc(p.description)}</small>
+    </button>`).join('');
+  host.querySelectorAll('[data-profile]').forEach(btn=>{
+    btn.onclick=()=>applyIssueProfile(btn.dataset.profile);
+  });
 }
 async function loadIssueCatalog() {
   const catalog=await api('disruption-issues');
   const max=catalog.max_select||4;
+  issueProfiles=catalog.profiles||[];
   $('issueList').dataset.max=String(max);
   $('issueList').innerHTML=(catalog.issues||[]).map(issue=>`
     <label class="issue-option">
@@ -149,17 +181,21 @@ async function loadIssueCatalog() {
       <span><strong>${esc(issue.label)}</strong><small>${esc(issue.description)}</small></span>
     </label>`).join('');
   $('issueList').querySelectorAll('input[type=checkbox]').forEach(box=>{
-    box.addEventListener('change',syncIssuePicker);
+    box.addEventListener('change',()=>syncIssuePicker(true));
   });
-  syncIssuePicker();
+  renderIssueProfiles();
+  syncIssuePicker(false);
 }
 $('generate').onclick=()=>action(async()=>{
   const seed=Number($('seed').value);
   if(!Number.isInteger(seed)||seed<0||seed>999999) throw Error('Seed must be an integer from 0 to 999999.');
   const issue_ids=selectedIssueIds();
   if(issue_ids.length>4) throw Error('Select at most 4 disruption issues.');
-  selected=null;$('view').value='current';accept(await api('scenarios/from-issues',{seed,issue_ids}));
-  message(`60-flight baseline validated with ${issue_ids.length} selected issue${issue_ids.length===1?'':'s'}. Apply disruptions to start the recovery comparison.`);await loadHistory();
+  const body={seed,issue_ids};
+  if(activeIssueProfile) body.profile=activeIssueProfile;
+  selected=null;$('view').value='current';accept(await api('scenarios/from-issues',body));
+  const packNote=activeIssueProfile?` (${activeIssueProfile} profile)`:'';
+  message(`60-flight baseline validated with ${issue_ids.length} selected issue${issue_ids.length===1?'':'s'}${packNote}. Apply disruptions to start the recovery comparison.`);await loadHistory();
 });
 $('randomSeed').onclick=()=>{$('seed').value=Math.floor(Math.random()*1000000);$('seed').dispatchEvent(new Event('input'));message('Seed set to '+$('seed').value+'. Generate to build that day.');};
 $('seed').addEventListener('input',()=>{const n=Number($('seed').value);if(!Number.isInteger(n)||n<0||n>999999)$('seed').setCustomValidity('Use an integer from 0 to 999999');else $('seed').setCustomValidity('');});

@@ -52,6 +52,8 @@ class Scenario(Strict):
 class ScenarioFromIssues(Strict):
     seed:int=Field(default=42,ge=0,le=999999,strict=True)
     issue_ids:List[str]=Field(default_factory=list)
+    # Optional catalog pack (e.g. mechanical); fills issue_ids when omitted.
+    profile:str|None=None
 class Revision(Strict):revision:int=Field(ge=0,strict=True)
 class Experiment(Revision):
     mode:Literal['local','live']='local'
@@ -154,18 +156,27 @@ def disruption_issues():
     return disruption_catalog.catalog()
 @app.post('/api/scenarios/from-issues')
 def create_from_issues(body:ScenarioFromIssues):
-    if len(body.issue_ids)>disruption_catalog.MAX_ISSUES:
-        raise HTTPException(400,f'Select at most {disruption_catalog.MAX_ISSUES} issues')
+    profile_id=body.profile
+    issue_ids=list(body.issue_ids)
     try:
+        if profile_id:
+            pack_ids=disruption_catalog.resolve_profile(profile_id)
+            if issue_ids and set(issue_ids)!=set(pack_ids):
+                raise ValueError('issue_ids must match the selected profile pack (or omit issue_ids)')
+            issue_ids=pack_ids
+        if len(issue_ids)>disruption_catalog.MAX_ISSUES:
+            raise HTTPException(400,f'Select at most {disruption_catalog.MAX_ISSUES} issues')
         s=generate(body.seed, 'default')
-        disruption_catalog.apply_issues(s, body.issue_ids)
+        disruption_catalog.apply_issues(s, issue_ids, profile_id=profile_id)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(400,str(e))
     baseline=simulate(s,disrupted=False)
     if not baseline['feasible']:raise HTTPException(422,'Generated baseline failed validation')
-    ids=','.join(body.issue_ids) if body.issue_ids else 'none'
-    r={'id':uuid.uuid4().hex,'name':f'PIT overnight hub · custom · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'profile':'custom','issue_ids':list(body.issue_ids),'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
-    event(r,'scenario_generated',{'seed':body.seed,'issue_ids':body.issue_ids,'flights':len(s['flights']),'disruptions':len(s['disruptions'])});store.save_run(DATA,r);return r
+    run_profile=s.get('profile') or 'custom'
+    r={'id':uuid.uuid4().hex,'name':f'PIT overnight hub · {run_profile} · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'profile':run_profile,'issue_ids':list(issue_ids),'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
+    event(r,'scenario_generated',{'seed':body.seed,'issue_ids':issue_ids,'profile':run_profile,'flights':len(s['flights']),'disruptions':len(s['disruptions'])});store.save_run(DATA,r);return r
 @app.post('/api/scenarios')
 def create(body:Scenario):
     s=generate(body.seed, body.profile); baseline=simulate(s,disrupted=False)
