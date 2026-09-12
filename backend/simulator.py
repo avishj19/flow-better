@@ -6,6 +6,12 @@ import re
 MODEL_VERSION = 2
 HUB = 'PIT'
 AIRPORTS = {'PIT': (290,180), 'BOS': (510,65), 'JFK': (480,170), 'DCA': (395,285), 'ORD': (90,95), 'DTW': (180,55)}
+# Historical profiles are synthetic teaching packs inspired by BTS flaw days; not replay of carrier actions.
+PROFILES = {
+    'default': 'Standard seed disruptions (maintenance, ORD de-icing signal, crew limit, overnight).',
+    'snowzilla_ne': 'Multi-airport Northeast winter closures inspired by Jan 2016 / Jan 2022 BTS cancel spikes at JFK/DCA/BOS.',
+    'ord_winter': 'ORD-centered winter ops failure inspired by Jan 2019 / Jan 2024 BTS cancel+delay spikes at ORD.',
+}
 PLANS = {
     'cfo': (
         'The CFO Choice',
@@ -90,7 +96,8 @@ def network_snapshot(s, state=None):
     }
 
 
-def generate(seed=42):
+def generate(seed=42, profile='default'):
+    if profile not in PROFILES:raise ValueError('Unknown disruption profile')
     rng=random.Random(seed);flights=[];tails={};crews={}
     for i in range(10):
         tid=f'T{i+1:02}';cid=f'C{i+1:02}';start=740+i*8
@@ -117,10 +124,28 @@ def generate(seed=42):
         {'id':'D3','kind':'crew_limit','resource':'C01','max_duty':650,'label':'Crew availability update · C01 has only 45m buffer beyond its original final release'},
         {'id':'D4','kind':'overnight','resource':'T01','deadline':1400,'label':'Overnight slot change · T01 must be at PIT by 23:20 to protect tomorrow’s first rotation'},
     ]
-    return {'model_version':MODEL_VERSION,'seed':seed,'hub':HUB,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),
+    disruptions.extend(_profile_weather(profile))
+    return {'model_version':MODEL_VERSION,'seed':seed,'profile':profile,'profile_note':PROFILES[profile],'hub':HUB,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),
             'airports':{a:{'x':p[0],'y':p[1],'gates':4 if a==HUB else 2,'role':'hub' if a==HUB else 'spoke',
                           'overnight_role':'primary' if a==HUB else ('spare_base' if a=='DTW' else 'spoke')} for a,p in AIRPORTS.items()}}
 
+
+def _profile_weather(profile):
+    """Synthetic weather windows sized from BTS major-cancel days; not official FAA closures."""
+    if profile=='snowzilla_ne':
+        # Inspired by JFK/DCA/BOS cancel rates ≥67–100% on 2016-01-23/24 and 2022-01-29 (BTS PREZIP).
+        return [
+            {'id':'WX-JFK','kind':'weather','airport':'JFK','start':1080,'end':1320,'label':'JFK winter closure · synthetic 18:00–22:00 (Snowzilla-NE teaching pack)'},
+            {'id':'WX-DCA','kind':'weather','airport':'DCA','start':1080,'end':1320,'label':'DCA winter closure · synthetic 18:00–22:00 (Snowzilla-NE teaching pack)'},
+            {'id':'WX-BOS','kind':'weather','airport':'BOS','start':1100,'end':1340,'label':'BOS winter closure · synthetic 18:20–22:20 (Snowzilla-NE teaching pack)'},
+        ]
+    if profile=='ord_winter':
+        # Inspired by ORD 2019-01-28/30 and 2024-01-12 BTS cancel+weather/late-aircraft spikes.
+        return [
+            {'id':'WX-ORD','kind':'weather','airport':'ORD','start':1120,'end':1360,'label':'ORD winter movement restriction · synthetic 18:40–22:40 (ORD-winter teaching pack)'},
+            {'id':'WX-DTW','kind':'weather','airport':'DTW','start':1140,'end':1260,'label':'DTW winter spillover · synthetic 19:00–21:00 (ORD-winter teaching pack)'},
+        ]
+    return []
 
 def parse_signals(s,disrupted=True):
     """Narrow, deterministic extraction, not an LLM or general Slack understanding."""
@@ -153,11 +178,25 @@ def resources(s,disrupted):
     return tails,crews
 
 
+def storm_airports(s):
+    """Airports with modeled weather holds long enough that absorb-delay is historically unrealistic."""
+    return {d['airport'] for d in s.get('disruptions',[]) if d.get('kind')=='weather' and d.get('end',0)-d.get('start',0)>=180}
+
+
 def assignments(s,plan):
-    fs=deepcopy(s['flights'])
+    fs=deepcopy(s['flights']);storm=storm_airports(s)
     for f in fs:
-        f['cancelled']=plan=='operations' and f['rotation']==1 and f['leg']>=4
+        # Default Operations cancel: final ORD bank on rotation 1.
+        cancel=plan=='operations' and f['rotation']==1 and f['leg']>=4
+        # Storm teaching pack: cancel the entire last bank (legs 4–5) once any airport has a
+        # multi-hour weather hold. Matches BTS flaw days where cancel rates, not delay absorption,
+        # dominated (often 50–100% of departures).
+        if plan=='operations' and storm and f['leg']>=4:
+            cancel=True
+        f['cancelled']=cancel
         if plan=='loyalty' and f['rotation']==1 and f['leg']>=4:f.update(tail='R01',crew='RC01')
+        # Under storm, loyalty still ferries for rotation 1, but also put a reserve crew on the
+        # worst-hit early banks is out of scope; operations is the cancel-first answer.
     if plan=='loyalty':
         for ident,origin,dest,dep in [('FERRY-1','DTW','PIT',1050),('FERRY-2','PIT','DTW',1330)]:
             fs.append({'id':ident,'rotation':1,'leg':-1,'origin':origin,'destination':dest,'dep':dep,'arr':dep+60,'tail':'R01','crew':'RC01','pax':0,'ferry':True,'cancelled':False})
@@ -165,17 +204,50 @@ def assignments(s,plan):
 
 
 def gate_ok(bookings,start,end,cap):
-    return all(sum(a<=t<b for a,b in bookings)<cap for t in range(start,end))
+    """Half-open occupancy check without scanning every minute in the window."""
+    if end<=start:return True
+    active=0
+    for a,b in bookings:
+        if a<=start<b:active+=1
+    if active>=cap:return False
+    events=[]
+    for a,b in bookings:
+        if start<a<end:events.append((a,1))
+        if start<b<end:events.append((b,-1))
+    # Process releases before acquires at the same timestamp (half-open intervals).
+    events.sort(key=lambda e:(e[0],e[1]))
+    for _,delta in events:
+        active+=delta
+        if active>=cap:return False
+    return True
+
+
+def next_gate_time(bookings,start,end,cap):
+    """Earliest shift of a half-open window [start,end) that fits under gate capacity.
+    Returns the adjusted window start (same duration)."""
+    duration=end-start
+    if duration<=0:return start
+    t=start
+    for _ in range(1440):
+        if gate_ok(bookings,t,t+duration,cap):return t
+        ends=[b for a,b in bookings if a<=t<b]
+        if not ends:
+            # Occupancy at t is below cap but some interior peak blocked; step one minute.
+            t+=1;continue
+        nxt=min(ends)
+        t=nxt if nxt>t else t+1
+    return None
 
 
 def simulate(s,plan='cfo',disrupted=True):
     if s.get('model_version')!=MODEL_VERSION:raise ValueError('Archived model version: generate a new scenario for four-pillar recovery')
     if plan not in PLANS:raise ValueError('Unknown recovery strategy')
     rules=s['rules'];signals=parse_signals(s,disrupted);tails,crews=resources(s,disrupted)
-    result=[];done={};gates={a:[] for a in s['airports']}
+    result=[];done={};gates={a:[] for a in s['airports']};storm=storm_airports(s)
     for f in sorted(assignments(s,plan),key=lambda f:(f['dep'],f['id'])):
         if f['cancelled']:
-            f.update(actual_dep=None,actual_arr=None,delay=0,passenger_delay=1440,causes=['Cancelled to keep T01 at its overnight hub; 24h passenger delay assumed'],signal_ids=[])
+            reason='Cancelled under storm-bank policy for multi-hour weather airports' if storm and (f['origin'] in storm or f['destination'] in storm) else 'Cancelled to keep T01 at its overnight hub; 24h passenger delay assumed'
+            f.update(actual_dep=None,actual_arr=None,delay=0,passenger_delay=1440,causes=[reason],signal_ids=[])
             result.append(f);done[f['id']]=f;continue
         t=tails[f['tail']];c=crews[f['crew']];earliest=max(f['dep'],t['ready'],c['ready']);causes=[]
         if t['ready']>f['dep']:causes.append(f"Aircraft {f['tail']} ready {t['ready']}")
@@ -189,8 +261,17 @@ def simulate(s,plan='cfo',disrupted=True):
             closure=next((d for d in s['disruptions'] if disrupted and d['kind']=='weather' and ((d['airport']==f['origin'] and d['start']<=dep<d['end']) or (d['airport']==f['destination'] and d['start']<=arr<d['end']))),None)
             if closure:
                 dep=max(dep+1,closure['end'] if closure['airport']==f['origin'] else closure['end']-60);causes.append(closure['id']);continue
-            if not gate_ok(gates[f['origin']],dep-15,dep,s['airports'][f['origin']]['gates']) or not gate_ok(gates[f['destination']],arr,arr+15,s['airports'][f['destination']]['gates']):
-                dep+=1
+            # Departure occupies [dep-15, dep); arrival occupies [arr, arr+15).
+            origin_start=next_gate_time(gates[f['origin']],dep-15,dep,s['airports'][f['origin']]['gates'])
+            if origin_start is None:raise ValueError('Simulation horizon exhausted')
+            if origin_start>dep-15:
+                dep=origin_start+15
+                if 'Gate queue' not in causes:causes.append('Gate queue')
+                continue
+            dest_start=next_gate_time(gates[f['destination']],arr,arr+15,s['airports'][f['destination']]['gates'])
+            if dest_start is None:raise ValueError('Simulation horizon exhausted')
+            if dest_start>arr:
+                dep+=dest_start-arr
                 if 'Gate queue' not in causes:causes.append('Gate queue')
                 continue
             break

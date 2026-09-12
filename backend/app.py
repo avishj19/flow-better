@@ -30,7 +30,9 @@ async def guard(request:Request,call_next):
     r=await call_next(request);r.headers['X-Content-Type-Options']='nosniff';r.headers['X-IROP-Desk']=store.get_desk();return r
 
 class Strict(BaseModel):model_config=ConfigDict(extra='forbid')
-class Scenario(Strict):seed:int=Field(default=42,ge=0,le=999999,strict=True)
+class Scenario(Strict):
+    seed:int=Field(default=42,ge=0,le=999999,strict=True)
+    profile:Literal['default','snowzilla_ne','ord_winter']='default'
 class Revision(Strict):revision:int=Field(ge=0,strict=True)
 class Experiment(Revision):
     mode:Literal['local','live']='local'
@@ -71,10 +73,10 @@ def scenario_agent(ident:str,body:AgentChat):
     return virtual_agent.respond(get(ident),body.message)
 @app.post('/api/scenarios')
 def create(body:Scenario):
-    s=generate(body.seed); baseline=simulate(s,disrupted=False)
+    s=generate(body.seed, body.profile); baseline=simulate(s,disrupted=False)
     if not baseline['feasible']:raise HTTPException(422,'Generated baseline failed validation')
-    r={'id':uuid.uuid4().hex,'name':f'PIT overnight hub · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
-    event(r,'scenario_generated',{'seed':body.seed,'flights':len(s['flights']),'hub':s.get('hub'),'overnight_hubs':sorted({t['overnight_hub'] for t in s['tails'].values()})});store.save_run(DATA,r);return r
+    r={'id':uuid.uuid4().hex,'name':f'PIT hub · {body.profile} · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'profile':body.profile,'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
+    event(r,'scenario_generated',{'seed':body.seed,'profile':body.profile,'flights':len(s['flights']),'weather_disruptions':sum(1 for d in s['disruptions'] if d['kind']=='weather')});store.save_run(DATA,r);return r
 @app.post('/api/scenarios/{ident}/disrupt')
 def disrupt(ident:str,body:Revision):
     with lock:

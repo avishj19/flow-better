@@ -112,12 +112,21 @@ def projected_weather(snapshot,at=None):
     rows=snapshot['rows']
     if {r['airport'] for r in rows}!=set(BOUNDS) or not all(age(r['observed_epoch'],at,5400) for r in rows):raise ValueError('All six airports need observations no older than 90 minutes; refresh weather')
     disruptions=[];decisions=[]
+    cats=[]
     for r in rows:
         cat=r['category'];gust=r.get('gust_kt');wx=str(r.get('weather',''))
         if cat not in ('VFR','MVFR','IFR','LIFR'):raise ValueError('Unknown weather category; projection blocked')
         minutes={'VFR':0,'MVFR':15,'IFR':30,'LIFR':60}[cat]
         if isinstance(gust,(int,float)) and gust>=30:minutes=max(minutes,45)
         if 'TS' in wx:minutes=max(minutes,60)
-        decisions.append({'airport':r['airport'],'observed_at':r['observed_at'],'category':cat,'hold_minutes':minutes,'rule':'demo-weather-v1','basis':'Hypothetical movement hold projected to synthetic 19:00; not an official closure'})
+        # Snow/freezing precip tokens often accompany BTS winter cancel spikes; still a teaching heuristic.
+        if any(tok in wx for tok in ('SN','FZ','SG','PL')):minutes=max(minutes,90)
+        cats.append((r,cat,minutes,wx,gust))
+    # Multi-airport IFR+/LIFR networks historically cascade (Snowzilla-style). Extend holds for training.
+    hard=sum(1 for _,cat,_,_,_ in cats if cat in ('IFR','LIFR'))
+    network_bonus=30 if hard>=3 else 0
+    for r,cat,minutes,wx,gust in cats:
+        minutes=minutes+network_bonus if minutes else 0
+        decisions.append({'airport':r['airport'],'observed_at':r['observed_at'],'category':cat,'hold_minutes':minutes,'rule':'demo-weather-v2','network_ifr_lifr_count':hard,'basis':'Hypothetical movement hold projected to synthetic 19:00; not an official closure. v2 adds snow tokens + multi-airport IFR cascade bonus informed by BTS winter cancel days.'})
         if minutes:disruptions.append({'id':'WX-'+r['airport'],'kind':'weather','airport':r['airport'],'start':1140,'end':1140+minutes,'label':f"{r['airport']} observed {cat} → hypothetical {minutes}m hold at synthetic 19:00",'source_snapshot':snapshot['id'],'observed_at':r['observed_at']})
     return disruptions,decisions

@@ -17,9 +17,15 @@ def test_weather_cache_normalization_and_policy(tmp_path):
     assert cached['id']==s['id'] and cached['cached'] and len(calls)==1
     ds,decisions=live.projected_weather(s,at=at)
     assert [d['end']-d['start'] for d in ds]==[30,45,60]
+    assert all(d['rule']=='demo-weather-v2' for d in decisions)
     assert all('not an official closure' in d['basis'] for d in decisions)
+    # Three-airport IFR/LIFR cascade adds a teaching bonus on top of each non-zero hold.
+    hard=[{**row,'fltCat':'IFR'} for row in weather(at)]
+    hard[0]['fltCat']='LIFR';hard[1]['fltCat']='IFR';hard[2]['fltCat']='IFR'
+    s2=live.fetch(tmp_path/'cascade','weather',request=lambda *args:hard,at=at)
+    ds2,dec2=live.projected_weather(s2,at=at)
+    assert all(d['hold_minutes']>=30+30 for d in dec2 if d['hold_minutes'])
     assert live.read(tmp_path,s['id'])['rows']==s['rows']
-
 @pytest.mark.parametrize('change',['stale','missing','unknown','future','sandbox'])
 def test_projection_fails_closed(tmp_path,change):
     at=time.time();s=live.fetch(tmp_path,'weather',request=lambda *args:weather(at),at=at)
