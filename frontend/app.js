@@ -26,6 +26,23 @@ function accept(result) {
   render();
 }
 function currentView() { return $('view').value==='preview'?selected:state[$('view').value]; }
+function renderNetwork() {
+  if(!state)return;
+  const aps=state.scenario.airports, hub=aps.PIT, live=window.liveWeatherOverlay?.();
+  $('network').innerHTML=Object.entries(aps).filter(([a])=>a!=='PIT').map(([a,p])=>{
+    const stroke=live?.[a]?.hold>0?(live[a].color||'#efad58'):'#436b88';
+    return `<path class="route" d="M ${hub.x} ${hub.y} Q ${(hub.x+p.x)/2} ${Math.min(hub.y,p.y)-35} ${p.x} ${p.y}" stroke="${stroke}" stroke-width="${live?.[a]?.hold>0?2.2:1.5}" fill="none" stroke-dasharray="4 4"/>`;
+  }).join('')+Object.entries(aps).map(([a,p])=>{
+    const injected=state.phase!=='baseline'&&state.scenario.disruptions.some(d=>d.airport===a);
+    const liveColor=live?.[a]?.color;
+    const core=liveColor||(injected?'#efad58':'#6ecdc0');
+    const halo=liveColor?`<circle class="wx-halo" cx="${p.x}" cy="${p.y}" r="${a==='PIT'?34:24}" fill="${core}" fill-opacity="0.18"/>`:'';
+    const label=live?.[a]
+      ? `<text x="${p.x}" y="${p.y+(a==='PIT'?66:50)}" text-anchor="middle" class="wx-label" fill="${core}">${esc(live[a].category)}${live[a].hold?` · ${live[a].hold}m`:''}</text>`
+      : (a==='PIT'?`<text x="${p.x}" y="${p.y+52}" text-anchor="middle" style="font-size:9px">OVERNIGHT HUB</text>`:'');
+    return `${halo}<circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?23:14}" fill="#1b3146"/><circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?9:5}" fill="${core}"/><text x="${p.x}" y="${p.y+36}" text-anchor="middle" font-weight="700">${a}</text>${label}`;
+  }).join('');
+}
 function render() {
   if(!state)return;
   $('empty').hidden=true; $('scenario').hidden=false;
@@ -39,8 +56,7 @@ function render() {
     ['Crew buffer',`${scores.crew_buffer.minutes_remaining}m`,scores.crew_buffer.minutes_remaining<0?'Hard constraint failed · modeled duty':'Minimum remaining across operating crews']
   ] : [['Financial cost',money(m.cost),'Archived cost formula'],['Passenger delay',num(m.passenger_minutes),'Archived passenger minutes'],['Missed connections',m.missed_pax,'Archived result'],['Model version','1','Generate a new scenario to use four pillars']];
   $('metrics').innerHTML=metrics.map(([label,value,note])=>`<div class="metric"><span class="label">${label}</span><strong>${value}</strong><small>${note}</small></div>`).join('');
-  const aps=state.scenario.airports, hub=aps.PIT;
-  $('network').innerHTML=Object.entries(aps).filter(([a])=>a!=='PIT').map(([a,p])=>`<path d="M ${hub.x} ${hub.y} Q ${(hub.x+p.x)/2} ${Math.min(hub.y,p.y)-35} ${p.x} ${p.y}" stroke="#436b88" stroke-width="1.5" fill="none" stroke-dasharray="4 4"/>`).join('')+Object.entries(aps).map(([a,p])=>`<circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?23:14}" fill="#1b3146"/><circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?9:5}" fill="${state.phase!=='baseline'&&state.scenario.disruptions.some(d=>d.airport===a)?'#efad58':'#6ecdc0'}"/><text x="${p.x}" y="${p.y+36}" text-anchor="middle" font-weight="700">${a}</text>${a==='PIT'?`<text x="${p.x}" y="${p.y+52}" text-anchor="middle" style="font-size:9px">OVERNIGHT HUB</text>`:''}`).join('');
+  renderNetwork();
   $('disruptions').innerHTML=state.scenario.disruptions.map(d=>`<div class="disruption"><b>${esc(d.id)}</b><div>${esc(d.label)}<small>${esc(d.kind.replaceAll('_',' ').toUpperCase())} · ${state.phase==='baseline'?'Ready to inject':'Applied'}</small></div></div>`).join('');
   $('signals').innerHTML=(state.scenario.unstructured_signals||[]).map(s=>`<div class="signal-box"><span class="eyebrow">UNSTRUCTURED INPUT · ${esc(s.id)}</span><blockquote>${esc(s.text)}</blockquote><p>Bounded parser extracts airport and added turnaround minutes. Source window: ${time(s.start)}–${time(s.end)}. Original text is preserved as evidence.</p></div>`).join('');
   $('disrupt').disabled=busy||!modern()||state.phase!=='baseline'; $('disrupt').textContent=state.phase==='baseline'?'Inject four disruptions →':'Disruptions applied ✓';
@@ -88,7 +104,14 @@ async function loadHistory() {
   $('historyList').innerHTML=history.length?history.map(h=>`<div class="history-row"><div>${esc(h.name)} <small>${esc(h.phase)} · revision ${h.revision} · ${esc(new Date(h.created).toLocaleString())}</small></div><button class="quiet" data-load="${h.id}">Open →</button></div>`).join(''):'<p class="muted">Saved scenarios, experiments and decisions appear here.</p>';
   $('historyList').querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios/'+b.dataset.load));message(modern()?'Saved scenario loaded.':'Archived scenario loaded for review. Generate a new scenario to evaluate the new model.');}));
 }
-$('generate').onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios',{seed:Number($('seed').value)}));message('60-flight baseline validated. Inject four disruptions to start the recovery comparison.');await loadHistory();});
+$('generate').onclick=()=>action(async()=>{
+  const seed=Number($('seed').value);
+  if(!Number.isInteger(seed)||seed<0||seed>999999) throw Error('Seed must be an integer from 0 to 999999.');
+  selected=null;$('view').value='current';accept(await api('scenarios',{seed}));
+  message('60-flight baseline validated. Inject four disruptions to start the recovery comparison.');await loadHistory();
+});
+$('randomSeed').onclick=()=>{$('seed').value=Math.floor(Math.random()*1000000);$('seed').dispatchEvent(new Event('input'));message('Seed set to '+$('seed').value+'. Generate to build that day.');};
+$('seed').addEventListener('input',()=>{const n=Number($('seed').value);if(!Number.isInteger(n)||n<0||n>999999)$('seed').setCustomValidity('Use an integer from 0 to 999999');else $('seed').setCustomValidity('');});
 $('disrupt').onclick=()=>action(async()=>{accept(await api(`scenarios/${state.id}/disrupt`,{revision:state.revision}));message('Four disruptions applied. ORD’s ground-ops message now changes turnaround math.');await loadHistory();});
 $('evaluate').onclick=()=>action(async()=>{message($('live').checked?'OpenAI is requesting bounded simulations…':'Calculating three strategies across four pillars…');accept(await api(`scenarios/${state.id}/experiments`,{revision:state.revision,mode:$('live').checked?'live':'local',consent:$('consent').checked}));message(exp?.status==='failed'?'Workflow failed: '+exp.error:'Three strategies calculated. Inspect the math, compare the trade-offs, and choose a feasible plan.',exp?.status==='failed');await loadHistory();});
 $('live').onchange=()=>{$('consentLabel').hidden=!$('live').checked;$('aiStatus').textContent=$('live').checked?'OpenAI planner · aggregate evidence only':'Deterministic planner · no LLM';};
