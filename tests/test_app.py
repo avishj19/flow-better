@@ -55,3 +55,18 @@ def test_archive_readonly(client):
     r=client.post('/api/scenarios',json={}).json();r['scenario'].pop('model_version');store.save_run(a.DATA,r)
     assert client.get('/api/scenarios/'+r['id']).status_code==200
     assert client.post('/api/scenarios/'+r['id']+'/disrupt',json={'revision':0}).status_code==409
+
+
+def test_decade_analysis_on_demand(client):
+    status=client.get('/api/analysis/status').json()
+    assert status['available'] and status['airports'][0]=='PIT'
+    starters=client.get('/api/analysis/starters').json()
+    assert 'Rank 2024 on-time performance' in starters['prompts']
+    bare=client.post('/api/analysis/ask',json={'message':'Rank 2024 on-time performance'}).json()
+    assert bare['status']=='completed' and bare['topic']=='otp_rank' and 'PIT' in bare['reply']
+    assert client.post('/api/analysis/ask',json={'message':'hi','mode':'live','consent':False}).status_code==422
+    r=client.post('/api/scenarios',json={'seed':42}).json()
+    client.post(f"/api/scenarios/{r['id']}/disrupt",json={'revision':0})
+    ctx=client.post(f"/api/scenarios/{r['id']}/analysis",json={'message':'Context for this scenario’s airports'}).json()
+    assert ctx['status']=='completed' and ctx['topic']=='scenario' and 'ORD' in ctx['reply']
+    assert 'analysis' in client.get('/api/status').json()
