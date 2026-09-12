@@ -1,4 +1,6 @@
-# FlowBetter — explainable airline recovery
+# FlowBetter — airport recovery workspace
+
+The cinematic airport website now embeds the complete working recovery desk at `/#simulation`. All seven feature branches are integrated. See [INTEGRATION-HANDOFF.md](INTEGRATION-HANDOFF.md) for the feature inventory, local run instructions, and the remaining Python hosting connection for the published Sites URL. The old standalone frontend entrypoint has been removed; `/desk` redirects into this website.
 
 **Airport-facing website:** the new cinematic landing page is served at `/`; the complete recovery dashboard is now at `/desk`. See [WEBSITE-HANDOFF.md](WEBSITE-HANDOFF.md) for site editing, assets, motion, and hosting details.
 
@@ -21,7 +23,7 @@ The React bundle is included, so running the demo requires no Node build. After 
 
 ```sh
 npm ci
-npm run build
+npm run build:dashboard
 npm test
 python -m pytest -q
 ```

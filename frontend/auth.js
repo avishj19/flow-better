@@ -55,7 +55,7 @@ function paint() {
 }
 
 function bindButtons(client, cfg) {
-  el('authLogin')?.addEventListener('click', () => client.loginWithRedirect());
+  el('authLogin')?.addEventListener('click', () => {if(window.parent!==window){window.top.location.href=window.location.origin+'/simulation';return;}client.loginWithRedirect();});
   el('authLogout')?.addEventListener('click', () => client.logout({logoutParams: {returnTo: window.location.origin}}));
   el('authStepUp')?.addEventListener('click', () => window.flowbetterAuth.stepUp());
 }
@@ -67,7 +67,7 @@ async function start() {
     if (!cfg.enabled) return;
     const {createAuth0Client} = await import(SPA_JS);
     const params = {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + '/simulation',
       audience: cfg.audience,
       scope: DESK_SCOPES,
     };

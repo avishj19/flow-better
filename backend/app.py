@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import hmac
 import json
 import os
 import threading
@@ -8,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
@@ -17,14 +18,17 @@ from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSI
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
 app=FastAPI(title='FlowBetter · IROP Recovery Sandbox')
-app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver'])
+app.add_middleware(TrustedHostMiddleware,allowed_hosts=os.getenv('IROP_ALLOWED_HOSTS','127.0.0.1,localhost,testserver').split(','))
 lock=threading.RLock()
 
 @app.middleware('http')
 async def guard(request:Request,call_next):
+    gateway_token=os.getenv('IROP_PROXY_TOKEN','')
+    if gateway_token and request.url.path.startswith('/api/') and not hmac.compare_digest(request.headers.get('x-flowbetter-gateway',''),gateway_token):
+        return JSONResponse({'detail':'Gateway authentication required'},status_code=401)
     origin=request.headers.get('origin')
     allowed=os.getenv('IROP_ORIGINS','http://127.0.0.1:8010,http://localhost:8010,http://127.0.0.1:8011,http://localhost:8011').split(',')
-    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return Response('Cross-origin writes forbidden',status_code=403)
+    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return JSONResponse({'detail':'Cross-origin writes forbidden'},status_code=403)
     auth.set_claims(None)
     try:
         if auth.enabled() and not auth.is_public(request.url.path) and request.method!='OPTIONS':
@@ -71,6 +75,9 @@ def digest(o):return hashlib.sha256(json.dumps({k:v for k,v in o.items() if k no
 
 def current_model(r):
     if r['scenario'].get('model_version')!=MODEL_VERSION:raise HTTPException(409,'Archived model: generate a new scenario to use four-pillar recovery')
+
+@app.get('/healthz')
+def health():return {'status':'ok'}
 
 @app.get('/api/status')
 def status():
@@ -168,7 +175,10 @@ def approve(ident:str,body:Approval):
 def home():return FileResponse(ROOT/'dist/index.html')
 
 @app.get('/desk')
-def recovery_desk():return FileResponse(ROOT/'frontend/index.html')
+def recovery_desk():return RedirectResponse('/#simulation',status_code=307)
+
+@app.get('/simulation')
+def embedded_simulator():return FileResponse(ROOT/'dist/simulation.html')
 
 @app.get('/site.css')
 def story_styles():return FileResponse(ROOT/'dist/site.css')
@@ -188,7 +198,7 @@ app.mount('/assets',StaticFiles(directory=ROOT/'dist/assets'),name='story-assets
 def flight_map_observations(airport:str='JFK',radius:int=100):
     from .flight_map import snapshot, AIRPORTS
     if airport not in AIRPORTS or radius not in (25,50,100,150):raise HTTPException(400,'Unsupported airport or radius')
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import RedirectResponse, JSONResponse
     try:return JSONResponse(snapshot(airport,radius),headers={'Cache-Control':'no-store'})
     except ValueError:return JSONResponse({'error':'The live flight feed is temporarily unavailable.','retrySeconds':30},status_code=503,headers={'Retry-After':'30','Cache-Control':'no-store'})
 
@@ -198,6 +208,10 @@ def flight_map_observations(airport:str='JFK',radius:int=100):
 def flight_map_assets(request:Request):return FileResponse(ROOT/'dist'/request.url.path.lstrip('/'))
 
 app.mount('/vendor',StaticFiles(directory=ROOT/'dist/vendor'),name='website-vendor')
+
+@app.get('/workspace.css')
+@app.get('/workspace.js')
+def workspace_assets(request:Request):return FileResponse(ROOT/'dist'/request.url.path.lstrip('/'))
 
 app.mount('/static',StaticFiles(directory=ROOT/'frontend'),name='static')
 

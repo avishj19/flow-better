@@ -16,7 +16,7 @@ window.refreshLiveControls=()=>{
   if($('weatherFreshness'))$('weatherFreshness').textContent=freshWeather(weatherSnapshot)?'current enough to project':'missing or stale data; projection blocked';
   $('applyWeather').disabled=busy||!state||!modern()||!freshWeather(weatherSnapshot);
   $('fetchAircraft').disabled=busy||!liveConfig?.fr24_configured;
-  if(typeof renderNetwork==='function'&&state)renderNetwork();
+  if(state){if(typeof paintNetwork==='function')paintNetwork();else renderNetwork();}
 };
 
 function renderHoldPreview(s){

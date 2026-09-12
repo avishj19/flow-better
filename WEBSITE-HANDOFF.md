@@ -1,3 +1,7 @@
+# Current integration status
+
+The website now embeds the full Python-backed recovery workspace. Read [INTEGRATION-HANDOFF.md](INTEGRATION-HANDOFF.md) for current run/deployment instructions and the live backend connection requirement. The original narrative below documents the initial version.
+
 # FlowBetter airport website
 
 The airport-facing website is authored in `dist/`. It uses the existing FlowBetter name and ✳ wordmark treatment, an original airport illustration, and repository-derived synthetic recovery results. The original simulator and frontend remain intact; the Python app now serves the new website at `/` and the full recovery desk at `/desk`.

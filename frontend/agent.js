@@ -44,6 +44,7 @@ function paintNetwork() {
   const aps = state.scenario.airports, hub = aps.PIT, hubs = overnightHubsFromState();
   const weather = a => state.phase !== 'baseline' && state.scenario.disruptions.some(d => d.airport === a);
   const focus = a => agentHighlights.includes(a);
+  const live = window.liveWeatherOverlay?.();
   const routes = Object.entries(aps).filter(([a]) => a !== 'PIT').map(([a, p]) => {
     const active = focus(a) || focus('PIT');
     return `<path class="route ${active ? 'lit' : ''}" d="M ${hub.x} ${hub.y} Q ${(hub.x + p.x) / 2} ${Math.min(hub.y, p.y) - 35} ${p.x} ${p.y}" fill="none"/>`;
@@ -56,9 +57,9 @@ function paintNetwork() {
       ${isHub ? `<circle cx="${p.x}" cy="${p.y}" r="34" class="hub-ring"/>` : ''}
       ${a === 'DTW' ? `<circle cx="${p.x}" cy="${p.y}" r="20" class="spare-ring"/>` : ''}
       <circle cx="${p.x}" cy="${p.y}" r="${isHub ? 23 : 14}" class="pad"/>
-      <circle cx="${p.x}" cy="${p.y}" r="${isHub ? 9 : 5}" class="core ${wx ? 'wx' : ''}"/>
+      <circle cx="${p.x}" cy="${p.y}" r="${isHub ? 9 : 5}" class="core ${wx ? 'wx' : ''}" ${live?.[a] ? `style="fill:${live[a].color}"` : ''}/>
       <text x="${p.x}" y="${p.y + 36}" text-anchor="middle" font-weight="700">${a}</text>
-      <text x="${p.x}" y="${p.y + 52}" text-anchor="middle" class="${isHub ? 'hub-label' : 'park-label'}">${label}</text>
+      <text x="${p.x}" y="${p.y + 52}" text-anchor="middle" class="${isHub ? 'hub-label' : 'park-label'}">${label}${live?.[a] ? ` · ${esc(live[a].category)}` : ''}</text>
     </g>`;
   }).join('');
   $('network').innerHTML = routes + nodes;

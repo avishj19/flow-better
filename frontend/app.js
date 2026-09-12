@@ -70,7 +70,7 @@ function render() {
   if(typeof paintNetwork==='function') paintNetwork(); else renderNetwork();
   $('disruptions').innerHTML=state.scenario.disruptions.map(d=>`<div class="disruption"><b>${esc(d.id)}</b><div>${esc(d.label)}<small>${esc(d.kind.replaceAll('_',' ').toUpperCase())} · ${state.phase==='baseline'?'Ready to inject':'Applied'}</small></div></div>`).join('');
   $('signals').innerHTML=(state.scenario.unstructured_signals||[]).map(s=>`<div class="signal-box"><span class="eyebrow">UNSTRUCTURED INPUT · ${esc(s.id)}</span><blockquote>${esc(s.text)}</blockquote><p>Bounded parser extracts airport and added turnaround minutes. Source window: ${time(s.start)}–${time(s.end)}. Original text is preserved as evidence.</p></div>`).join('');
-  $('disrupt').disabled=busy||!modern()||state.phase!=='baseline'; $('disrupt').textContent=state.phase==='baseline'?'Inject four disruptions →':'Disruptions applied ✓';
+  $('disrupt').disabled=busy||!modern()||state.phase!=='baseline'; $('disrupt').textContent=state.phase==='baseline'?'Apply '+state.scenario.disruptions.length+' disruptions →':'Disruptions applied ✓';
   $('evaluate').disabled=busy||!modern()||state.phase!=='disrupted';
   const d=state.disrupted;
   $('cascade').textContent=d?`Without recovery: ${d.metrics.delayed_flights} delayed flights · ${d.metrics.missed_pax} missed connecting passengers · ${d.evidence.filter(e=>e.hard!==false&&!e.passed).length} failed hard checks.`:'';
@@ -127,12 +127,12 @@ async function loadHistory() {
 $('generate').onclick=()=>action(async()=>{
   const seed=Number($('seed').value);
   if(!Number.isInteger(seed)||seed<0||seed>999999) throw Error('Seed must be an integer from 0 to 999999.');
-  selected=null;$('view').value='current';accept(await api('scenarios',{seed}));
-  message('60-flight baseline validated. Inject four disruptions to start the recovery comparison.');await loadHistory();
+  selected=null;$('view').value='current';accept(await api('scenarios',{seed,profile:$('profile').value}));
+  message('60-flight baseline validated. Apply the selected disruptions to start the recovery comparison.');await loadHistory();
 });
 $('randomSeed').onclick=()=>{$('seed').value=Math.floor(Math.random()*1000000);$('seed').dispatchEvent(new Event('input'));message('Seed set to '+$('seed').value+'. Generate to build that day.');};
 $('seed').addEventListener('input',()=>{const n=Number($('seed').value);if(!Number.isInteger(n)||n<0||n>999999)$('seed').setCustomValidity('Use an integer from 0 to 999999');else $('seed').setCustomValidity('');});
-$('disrupt').onclick=()=>action(async()=>{accept(await api(`scenarios/${state.id}/disrupt`,{revision:state.revision}));message('Four disruptions applied. ORD’s ground-ops message now changes turnaround math.');await loadHistory();});
+$('disrupt').onclick=()=>action(async()=>{accept(await api(`scenarios/${state.id}/disrupt`,{revision:state.revision}));message('Disruption profile applied. The original ground-ops message is preserved as evidence.');await loadHistory();});
 $('evaluate').onclick=()=>action(async()=>{message($('live').checked?'OpenAI is requesting bounded simulations…':'Calculating three strategies across four pillars…');accept(await api(`scenarios/${state.id}/experiments`,{revision:state.revision,mode:$('live').checked?'live':'local',consent:$('consent').checked}));message(exp?.status==='failed'?'Workflow failed: '+exp.error:'Three strategies calculated. Inspect the math, compare the trade-offs, and choose a feasible plan.',exp?.status==='failed');await loadHistory();});
 $('live').onchange=()=>{$('consentLabel').hidden=!$('live').checked;$('aiStatus').textContent=$('live').checked?'OpenAI planner · aggregate evidence only':'Deterministic planner · no LLM';};
 $('view').onchange=renderTimeline;$('rotation').onchange=renderTimeline;
