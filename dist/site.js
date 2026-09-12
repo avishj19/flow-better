@@ -63,3 +63,50 @@ $('#scenario-toggle').addEventListener('click', () => {
   $('#scenario-details').hidden = open;
   b.querySelector('span').textContent = open ? '+' : '−';
 });
+
+
+const insightForm = $('#insight-form');
+if (insightForm) {
+  insightForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = $('#insight-status');
+    const box = $('#insight-results');
+    const btn = $('#insight-submit');
+    const origin = $('#insight-origin').value;
+    const destination = $('#insight-destination').value;
+    const month = Number($('#insight-month').value);
+    const year = Number($('#insight-year').value);
+    if (origin === destination) {
+      status.textContent = 'Pick two different airports.';
+      box.hidden = true;
+      return;
+    }
+    btn.disabled = true;
+    status.textContent = 'Reading decade logs…';
+    box.hidden = true;
+    try {
+      const res = await fetch('/api/flight-insight', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({origin, destination, month, year})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Insight request failed');
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const cards = data.airports.map(a => {
+        const flaws = (a.flaw_days || []).slice(0, 2).map(f =>
+          `<div class="flaw"><b>${esc(f.date)}</b> · ${esc(f.pattern || 'disruption')}<br>${esc(f.desk_read || '')}</div>`
+        ).join('');
+        return `<article class="insight-card"><h3>${esc(a.airport)}</h3><span class="role">${esc(a.role)}</span><ul>${(a.bullets||[]).map(b=>`<li>${esc(b)}</li>`).join('')}</ul>${flaws}</article>`;
+      }).join('');
+      box.innerHTML = `<div class="insight-takeaways"><h3>What the logs say</h3><ul>${(data.takeaways||[]).map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div><div class="insight-cards">${cards}</div><p class="insight-note">${esc(data.scope)}</p>`;
+      box.hidden = false;
+      status.textContent = `${origin} → ${destination} · ${month}/${year}`;
+    } catch (err) {
+      status.textContent = err.message || 'Could not load insights';
+      box.hidden = true;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}

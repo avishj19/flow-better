@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
-from . import store, agent_workflow as workflow, live_data, virtual_agent, analysis_agent, auth
+from . import store, agent_workflow as workflow, live_data, virtual_agent, analysis_agent, auth, decade_data
 from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION, network_snapshot
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
@@ -62,6 +62,11 @@ class AnalysisAsk(Strict):
     mode:Literal['local','live']='local'
     consent:bool=False
     scenario_id:str|None=None
+class FlightInsight(Strict):
+    origin:str=Field(min_length=3,max_length=3)
+    destination:str=Field(min_length=3,max_length=3)
+    month:int=Field(ge=1,le=12,strict=True)
+    year:int=Field(default=2024,ge=2016,le=2025,strict=True)
 
 def get(ident):
     r=store.get_run(DATA,ident)
@@ -95,6 +100,11 @@ def auth_me():
     return {'enabled':True,'authenticated':True,'identity':auth.public_identity(claims),'permissions':sorted(auth.permissions(claims)),'desk':store.get_desk()}
 @app.get('/api/agent/starters')
 def agent_starters():return {'prompts':virtual_agent.starter_prompts(),'scope':'Local desk agent · network + overnight hub briefings'}
+@app.post('/api/flight-insight')
+def flight_insight(body:FlightInsight):
+    try:return decade_data.flight_insight(body.origin,body.destination,body.month,body.year)
+    except ValueError as e:raise HTTPException(422,str(e))
+    except FileNotFoundError as e:raise HTTPException(503,str(e))
 @app.get('/api/analysis/status')
 def analysis_status():return analysis_agent.config()
 @app.get('/api/analysis/starters')

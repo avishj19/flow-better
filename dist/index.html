@@ -21,6 +21,7 @@
     <nav aria-label="Main navigation">
       <a href="#recovery">Compare options</a>
       <a href="#flight-map-section">Live aircraft map</a>
+      <a href="#flight-insight">Flight insights</a>
       <a href="#approach">How plans are evaluated</a>
     </nav>
     <a class="nav-cta" href="/simulation">Run a simulation</a>
@@ -124,6 +125,55 @@
       <div class="flight-footnote">
         <p>Live observations from <a href="https://www.adsb.lol/" target="_blank" rel="noreferrer">ADSB.lol <span aria-hidden="true">↗</span></a> · <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer">ODbL 1.0 <span aria-hidden="true">↗</span></a>. Receiver coverage varies. This shows nearby aircraft, not a verified arrivals or departures board.</p>
       </div>
+    </section>
+
+
+    <section class="insight section" id="flight-insight" aria-labelledby="insight-title">
+      <div class="section-intro">
+        <div>
+          <h2 id="insight-title">Check a flight against the decade logs</h2>
+        </div>
+        <p>Enter a route in the six-airport pack. We return on-time history, weather cues, and sample disruption days from the local BTS / FAA / NOAA logs—not a live prediction.</p>
+      </div>
+      <form class="insight-form" id="insight-form">
+        <label>From
+          <select id="insight-origin" name="origin" required>
+            <option value="PIT">PIT</option>
+            <option value="BOS">BOS</option>
+            <option value="JFK">JFK</option>
+            <option value="DCA">DCA</option>
+            <option value="ORD" selected>ORD</option>
+            <option value="DTW">DTW</option>
+          </select>
+        </label>
+        <label>To
+          <select id="insight-destination" name="destination" required>
+            <option value="PIT" selected>PIT</option>
+            <option value="BOS">BOS</option>
+            <option value="JFK">JFK</option>
+            <option value="DCA">DCA</option>
+            <option value="ORD">ORD</option>
+            <option value="DTW">DTW</option>
+          </select>
+        </label>
+        <label>Month
+          <select id="insight-month" name="month" required>
+            <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+            <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+            <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+            <option value="10">Oct</option><option value="11">Nov</option><option value="12" selected>Dec</option>
+          </select>
+        </label>
+        <label>Year
+          <select id="insight-year" name="year">
+            <option>2024</option><option>2023</option><option>2022</option><option>2021</option><option>2020</option>
+            <option>2019</option><option>2018</option><option>2017</option><option>2016</option>
+          </select>
+        </label>
+        <button class="button primary" type="submit" id="insight-submit">Get insights</button>
+      </form>
+      <p class="insight-status" id="insight-status" role="status" aria-live="polite"></p>
+      <div class="insight-results" id="insight-results" hidden></div>
     </section>
 
     <section class="approach section" id="approach">

@@ -165,3 +165,28 @@ footer>div{display:flex;align-items:center;gap:20px;font-size:12px;color:#9db0c9
   }
   .principles article:hover { transform: translateY(-3px); }
 }
+
+
+/* Flight insight form */
+.insight{background:#0a192b}
+.insight .section-intro>p{color:#9bafc9}
+.insight-form{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin-top:8px}
+.insight-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#9bb0c8}
+.insight-form select{min-width:110px;padding:10px 12px;border-radius:4px;border:1px solid #3a536f;background:#102033;color:#e7eef8;font:inherit}
+.insight-form .button{margin:0}
+.insight-status{min-height:1.4em;margin:14px 0 0;color:#8e9fb7;font-size:14px}
+.insight-results{margin-top:22px;display:grid;gap:16px}
+.insight-takeaways{padding:18px 20px;border:1px solid #2f4660;border-radius:6px;background:#0d1c2e}
+.insight-takeaways h3{font-size:18px;margin:0 0 10px}
+.insight-takeaways li{margin:0 0 8px;color:#b7c6d8;line-height:1.5}
+.insight-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.insight-card{padding:18px 20px;border:1px solid #2f4660;border-radius:6px;background:#101f33}
+.insight-card h3{margin:0 0 6px;font-size:20px}
+.insight-card .role{font-size:12px;color:#91b8ff;margin-bottom:12px;display:block}
+.insight-card li{margin:0 0 8px;color:#b7c6d8;font-size:14px;line-height:1.5}
+.insight-card .flaw{margin-top:12px;padding-top:12px;border-top:1px solid #2a4058;font-size:13px;color:#9bb0c8}
+.insight-note{font-size:12px;color:#8499b2;margin:0}
+@media(max-width:700px){.insight-cards{grid-template-columns:1fr}.insight-form label{flex:1 1 40%}}
+@media(prefers-reduced-motion:no-preference){
+  .insight-results{animation:rise-in .45s cubic-bezier(.22,1,.36,1) both}
+}
