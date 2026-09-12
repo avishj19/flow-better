@@ -1,0 +1,61 @@
+airport,year,enplanements,hub,source_file,preliminary
+BOS,2016,17759044,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2017,18759742,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2018,20006521,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2019,20699377,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2020,6035452,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2021,10909817,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2022,17443775,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2023,19962678,L,FAA commercial-service enplanements PDF (previous_years),False
+BOS,2024,21090721,L,arp-cy2024-commercial-service-enplanements.xlsx,False
+BOS,2025,21021153,L,arp-cy2025-commercial-service-enplanements-preliminary.xlsx,True
+DCA,2016,11470854,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2017,11506310,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2018,11366771,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2019,11595454,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2020,3573489,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2021,6731737,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2022,11553850,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2023,12365030,L,FAA commercial-service enplanements PDF (previous_years),False
+DCA,2024,12750892,L,arp-cy2024-commercial-service-enplanements.xlsx,False
+DCA,2025,12003594,L,arp-cy2025-commercial-service-enplanements-preliminary.xlsx,True
+DTW,2016,16847135,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2017,17036092,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2018,17436837,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2019,18143040,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2020,6822324,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2021,11517696,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2022,13751197,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2023,15378601,L,FAA commercial-service enplanements PDF (previous_years),False
+DTW,2024,16110696,L,arp-cy2024-commercial-service-enplanements.xlsx,False
+DTW,2025,16294768,L,arp-cy2025-commercial-service-enplanements-preliminary.xlsx,True
+JFK,2016,29239151,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2017,29533154,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2018,30620769,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2019,31036655,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2020,8269819,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2021,15273342,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2022,27154885,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2023,30804355,L,FAA commercial-service enplanements PDF (previous_years),False
+JFK,2024,31466102,L,arp-cy2024-commercial-service-enplanements.xlsx,False
+JFK,2025,30792806,L,arp-cy2025-commercial-service-enplanements-preliminary.xlsx,True
+ORD,2016,37589899,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2017,38593028,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2018,39873927,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2019,40871223,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2020,14606034,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2021,26350976,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2022,33120474,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2023,35843104,L,FAA commercial-service enplanements PDF (previous_years),False
+ORD,2024,38575693,L,arp-cy2024-commercial-service-enplanements.xlsx,False
+ORD,2025,40680735,L,arp-cy2025-commercial-service-enplanements-preliminary.xlsx,True
+PIT,2016,3986114,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2017,4327434,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2018,4670033,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2019,4715947,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2020,1742406,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2021,3069259,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2022,3918968,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2023,4493052,M,FAA commercial-service enplanements PDF (previous_years),False
+PIT,2024,4862376,M,arp-cy2024-commercial-service-enplanements.xlsx,False
+PIT,2025,4792035,M,arp-cy2025-commercial-service-enplanements-preliminary.xlsx,True

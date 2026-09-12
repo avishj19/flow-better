@@ -1,0 +1,679 @@
+"""On-disk decade pack for FlowBetter's six airports (official public sources)."""
+from __future__ import annotations
+import csv
+import json
+from functools import lru_cache
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+_DOCS_PACK = _ROOT / 'docs' / 'airport-decade-dataset'
+_LEGACY_PACK = Path(__file__).resolve().parent / 'decade_pack'
+# Prefer the project docs path (source of truth); fall back to backend/decade_pack.
+PACK = _DOCS_PACK if (_DOCS_PACK / 'major_flaw_days.csv').is_file() else _LEGACY_PACK
+AIRPORTS = ('PIT', 'BOS', 'JFK', 'DCA', 'ORD', 'DTW')
+SCOPE = (
+    'Official public BTS / FAA / NOAA aggregates for PIT,BOS,JFK,DCA,ORD,DTW · '
+    '2016–2025 · teaching context only · not a live airline feed'
+)
+
+# Desk teaching labels — derived from pack patterns, not live SOC advice.
+PATTERN_SNOWZILLA = 'snowzilla_scale'
+PATTERN_ORD_WINTER = 'ord_winter_cascade'
+PATTERN_COVID_DEMAND = 'covid_demand_shock'
+PATTERN_WEATHER_STORM = 'weather_storm'
+PATTERN_GENERIC = 'generic_disruption'
+
+FILES = {
+    'otp_year': 'bts_airport_year_enriched.csv',
+    'weather_year': 'noaa_ghcn_airport_year_2016-2025.csv',
+    'flaw_days': 'major_flaw_days.csv',
+    'enplanements': 'faa_enplanements.csv',
+    'daily': 'bts_daily_airport_metrics.csv',
+    'stations': 'noaa_station_crosswalk.csv',
+}
+
+# BTS PREZIP flaw-day anchors used to size teaching storm profiles (not carrier replays).
+STORM_PROFILE_ANCHORS = {
+    'snowzilla_ne': (
+        ('JFK', '2022-01-29', 1080),
+        ('DCA', '2022-01-03', 1080),
+        ('BOS', '2019-01-20', 1100),
+    ),
+    'ord_winter': (
+        ('ORD', '2019-01-28', 1120),
+        ('DTW', '2024-01-12', 1140),
+    ),
+}
+
+
+def _path(key: str) -> Path:
+    p = PACK / FILES[key]
+    if not p.is_file():
+        raise FileNotFoundError(f'Decade pack missing {p.name}')
+    return p
+
+
+def _num(v):
+    if v is None or v == '':
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v
+    s = str(v).strip()
+    low = s.lower()
+    if low in ('true', 'false'):
+        return low == 'true'
+    try:
+        if s.isdigit() or (s.startswith('-') and s[1:].isdigit()):
+            return int(s)
+        return float(s)
+    except ValueError:
+        return s
+
+
+@lru_cache(maxsize=8)
+def _rows(key: str):
+    keep = {'airport', 'date', 'station_id', 'station_name', 'source', 'source_url',
+            'source_file', 'hub', 'status', 'suggested_station_id', 'verified_station_id',
+            'first_date', 'last_date'}
+    with _path(key).open(newline='', encoding='utf-8') as f:
+        return tuple(
+            {k: v if k in keep else _num(v) for k, v in row.items()}
+            for row in csv.DictReader(f)
+        )
+
+
+def available() -> bool:
+    return PACK.is_dir() and all((PACK / name).is_file() for name in FILES.values())
+
+
+def catalog():
+    counts = {k: len(_rows(k)) for k in FILES}
+    return {
+        'airports': list(AIRPORTS),
+        'years': list(range(2016, 2026)),
+        'tables': counts,
+        'sources': {
+            'otp_year': 'BTS PREZIP reporting-carrier annual OTP + FAA enplanements join',
+            'weather_year': 'NOAA GHCND airport-station annual weather',
+            'flaw_days': 'Top BTS sample disruption days by cancel/delay score',
+            'enplanements': 'FAA commercial-service enplanements CY2016–2025',
+            'daily': 'BTS PREZIP sample airport-days used for flaw mining',
+            'stations': 'Airport ↔ NOAA station crosswalk',
+        },
+        'scope': SCOPE,
+        'pack_dir': str(PACK),
+        'storm_profiles': str(PACK / 'storm_profiles.json'),
+    }
+
+
+def _flaw_day(airport: str, date: str) -> dict:
+    for r in _rows('flaw_days'):
+        if r.get('airport') == airport and r.get('date') == date:
+            return dict(r)
+    raise FileNotFoundError(f'No packed flaw day for {airport} on {date}')
+
+
+def hold_minutes_from_bts(row: dict, start_prefer: int = 1080) -> tuple[int, int, int]:
+    """Synthetic evening-bank hold sized from packed cancel rate + avg departure delay.
+
+    Floor 180m so Operations storm-bank cancel engages; cap 240m so the one-day
+    sandbox still has a feasible cancel-first Operations answer on multi-airport storms.
+    Packed BTS cancel counts / delay minutes are preserved on the disruption evidence —
+    only the synthetic hold length is capped for the teaching model.
+    """
+    cancel = float(row.get('dep_cancel_rate') or 0)
+    avg = float(row.get('avg_dep_delay') or 0)
+    duration = 180 + int(round(min(1.0, cancel) * 60))
+    if avg > 0:
+        duration += min(20, int(avg // 6))
+    duration = max(180, min(240, duration))
+    start = int(start_prefer)
+    return start, start + duration, duration
+
+
+@lru_cache(maxsize=4)
+def storm_profiles_payload() -> dict:
+    """Return storm_profiles.json, building from CSV anchors if the file is absent."""
+    path = PACK / 'storm_profiles.json'
+    if path.is_file():
+        return json.loads(path.read_text(encoding='utf-8'))
+    return {'scope': SCOPE, 'source_of_truth': str(PACK / FILES['flaw_days']),
+            'profiles': {k: storm_profile_spec(k) for k in ('default', 'snowzilla_ne', 'ord_winter')}}
+
+
+def storm_profile_spec(profile: str) -> dict:
+    """BTS-backed teaching pack for a scenario profile (metrics from major_flaw_days.csv)."""
+    if profile == 'default':
+        return {
+            'id': 'default',
+            'note': 'Standard seed disruptions (maintenance, ORD de-icing signal, crew limit, overnight).',
+            'airports': [],
+            'bts_anchor_days': [],
+        }
+    if profile not in STORM_PROFILE_ANCHORS:
+        raise ValueError(f'Unknown storm profile {profile}')
+    airports = []
+    anchors = []
+    for airport, date, start_pref in STORM_PROFILE_ANCHORS[profile]:
+        row = _flaw_day(airport, date)
+        start, end, duration = hold_minutes_from_bts(row, start_pref)
+        anchors.append({
+            'airport': airport,
+            'date': date,
+            'dep_flights': row.get('dep_flights'),
+            'dep_cancelled': row.get('dep_cancelled'),
+            'dep_cancel_rate': row.get('dep_cancel_rate'),
+            'dep_delay15_rate': row.get('dep_delay15_rate'),
+            'avg_dep_delay': row.get('avg_dep_delay'),
+            'weather_delay_min': row.get('weather_delay_min') or 0,
+            'late_aircraft_delay_min': row.get('late_aircraft_delay_min') or 0,
+            'disruption_score': row.get('disruption_score'),
+            'source': 'BTS PREZIP · major_flaw_days.csv',
+        })
+        airports.append({
+            **anchors[-1],
+            'hold_start': start,
+            'hold_end': end,
+            'hold_minutes': duration,
+            'hold_rule': 'teaching_mock_from_bts_cancel_rate_and_avg_dep_delay',
+        })
+    out = {
+        'id': profile,
+        'note': (
+            'Northeast winter stop sized from BTS PREZIP flaw days.'
+            if profile == 'snowzilla_ne'
+            else 'ORD-centered winter cascade sized from BTS PREZIP cancel + weather/late-aircraft minutes.'
+        ),
+        'pattern': PATTERN_SNOWZILLA if profile == 'snowzilla_ne' else PATTERN_ORD_WINTER,
+        'bts_anchor_days': anchors,
+        'airports': airports,
+    }
+    if profile == 'ord_winter':
+        ord_row = anchors[0]
+        avg = float(ord_row.get('avg_dep_delay') or 45)
+        extra = max(45, min(90, int(round(avg / 2))))
+        out['ground_ops_extra_turn_minutes'] = extra
+        out['ground_ops_source'] = {
+            'airport': 'ORD',
+            'date': ord_row['date'],
+            'avg_dep_delay': ord_row.get('avg_dep_delay'),
+            'late_aircraft_delay_min': ord_row.get('late_aircraft_delay_min'),
+            'weather_delay_min': ord_row.get('weather_delay_min'),
+            'rule': 'extra_turn = clamp(45,90, round(avg_dep_delay/2)) from BTS ORD flaw day',
+        }
+    return out
+
+
+def weather_disruptions_for_profile(profile: str) -> list[dict]:
+    """Weather disruption objects for simulator.generate — labels cite packed BTS numbers."""
+    if profile == 'default':
+        return []
+    spec = storm_profile_spec(profile)
+    pack_name = 'Snowzilla-NE' if profile == 'snowzilla_ne' else 'ORD-winter'
+    out = []
+    for a in spec['airports']:
+        cancel_pct = round(100 * float(a['dep_cancel_rate']), 1)
+        wx = int(a.get('weather_delay_min') or 0)
+        late = int(a.get('late_aircraft_delay_min') or 0)
+        avg = a.get('avg_dep_delay')
+        avg_txt = f'{avg:.0f}m avg dep delay' if avg is not None else 'avg dep delay n/a'
+        label = (
+            f"{a['airport']} winter hold · synthetic {_hhmm(a['hold_start'])}–{_hhmm(a['hold_end'])} "
+            f"({pack_name} teaching pack) · BTS {a['date']}: "
+            f"{int(a['dep_cancelled'])}/{int(a['dep_flights'])} deps cancelled ({cancel_pct}%), "
+            f"{wx:,} weather-delay min, {late:,} late-aircraft min, {avg_txt}"
+        )
+        out.append({
+            'id': f"WX-{a['airport']}",
+            'kind': 'weather',
+            'airport': a['airport'],
+            'start': int(a['hold_start']),
+            'end': int(a['hold_end']),
+            'label': label,
+            'bts_source': {
+                'date': a['date'],
+                'dep_flights': a['dep_flights'],
+                'dep_cancelled': a['dep_cancelled'],
+                'dep_cancel_rate': a['dep_cancel_rate'],
+                'weather_delay_min': a.get('weather_delay_min') or 0,
+                'late_aircraft_delay_min': a.get('late_aircraft_delay_min') or 0,
+                'avg_dep_delay': a.get('avg_dep_delay'),
+                'file': 'docs/airport-decade-dataset/major_flaw_days.csv',
+            },
+        })
+    return out
+
+
+def _hhmm(minutes: int) -> str:
+    minutes = int(minutes) % 1440
+    return f'{minutes // 60:02d}:{minutes % 60:02d}'
+
+
+def _airport(code: str | None):
+    if code is None:
+        return None
+    code = str(code).upper()
+    if code not in AIRPORTS:
+        raise ValueError(f'Airport must be one of {", ".join(AIRPORTS)}')
+    return code
+
+
+def otp_year(airport: str | None = None, year: int | None = None):
+    airport = _airport(airport)
+    rows = [r for r in _rows('otp_year') if (airport is None or r['airport'] == airport)
+            and (year is None or int(r['year']) == int(year))]
+    return rows
+
+
+def weather_year(airport: str | None = None, year: int | None = None):
+    airport = _airport(airport)
+    rows = [r for r in _rows('weather_year') if (airport is None or r['airport'] == airport)
+            and (year is None or int(r['year']) == int(year))]
+    return rows
+
+
+def enplanements(airport: str | None = None, year: int | None = None):
+    airport = _airport(airport)
+    rows = [r for r in _rows('enplanements') if (airport is None or r['airport'] == airport)
+            and (year is None or int(r['year']) == int(year))]
+    return rows
+
+
+def flaw_days(airport: str | None = None, limit: int = 12, weather_only: bool = False):
+    airport = _airport(airport)
+    limit = max(1, min(int(limit), 40))
+    rows = [r for r in _rows('flaw_days') if airport is None or r['airport'] == airport]
+    if weather_only:
+        rows = [r for r in rows if (r.get('weather_delay_min') or 0) > 0
+                or classify_flaw_day(r)['pattern'] in (PATTERN_SNOWZILLA, PATTERN_ORD_WINTER, PATTERN_WEATHER_STORM)]
+        # Drop pure COVID demand shocks when the ask is storm-focused.
+        rows = [r for r in rows if classify_flaw_day(r)['pattern'] != PATTERN_COVID_DEMAND]
+    return rows[:limit]
+
+
+def daily(airport: str, date: str | None = None, year: int | None = None, limit: int = 20):
+    airport = _airport(airport)
+    if airport is None:
+        raise ValueError('Airport is required for daily metrics')
+    limit = max(1, min(int(limit), 50))
+    rows = [r for r in _rows('daily') if r['airport'] == airport]
+    if date:
+        rows = [r for r in rows if r['date'] == date]
+    elif year is not None:
+        rows = [r for r in rows if int(r['year']) == int(year)]
+    return rows[:limit]
+
+
+def compare_otp(year: int = 2024):
+    year = int(year)
+    rows = otp_year(year=year)
+    ranked = sorted(rows, key=lambda r: (-(r.get('dep_ontime_pct') or 0), r['airport']))
+    return [{
+        'airport': r['airport'],
+        'year': r['year'],
+        'dep_ontime_pct': r.get('dep_ontime_pct'),
+        'arr_ontime_pct': r.get('arr_ontime_pct'),
+        'dep_cancelled_pct': r.get('dep_cancelled_pct'),
+        'origin_cause_weather_share_pct': r.get('origin_cause_weather_share_pct'),
+        'origin_cause_late_aircraft_share_pct': r.get('origin_cause_late_aircraft_share_pct'),
+        'enplanements': r.get('enplanements'),
+    } for r in ranked]
+
+
+def weather_risk(year: int = 2022):
+    """Rank airports by packed NOAA annual hazard cues for one year."""
+    year = int(year)
+    rows = weather_year(year=year)
+    ranked = []
+    for r in rows:
+        snow = float(r.get('total_snowfall_in') or 0)
+        thunder = float(r.get('thunder_days_WT03') or 0)
+        fog = float(r.get('fog_days_WT01') or 0)
+        heavy_fog = float(r.get('heavy_fog_days_WT02') or 0)
+        wind = float(r.get('extreme_wind_days_WSF2_ge_40mph') or 0)
+        # Relative teaching score — not an operational weather index.
+        score = snow * 1.2 + thunder * 1.5 + fog * 0.15 + heavy_fog * 0.8 + wind * 2.0
+        ranked.append({
+            'airport': r['airport'],
+            'year': year,
+            'risk_score': round(score, 1),
+            'total_snowfall_in': r.get('total_snowfall_in'),
+            'thunder_days_WT03': r.get('thunder_days_WT03'),
+            'fog_days_WT01': r.get('fog_days_WT01'),
+            'heavy_fog_days_WT02': r.get('heavy_fog_days_WT02'),
+            'extreme_wind_days_WSF2_ge_40mph': r.get('extreme_wind_days_WSF2_ge_40mph'),
+        })
+    ranked.sort(key=lambda x: (-x['risk_score'], x['airport']))
+    return ranked
+
+
+def station_for(airport: str):
+    airport = _airport(airport)
+    for r in _rows('stations'):
+        if r['airport'] == airport:
+            return {
+                'airport': airport,
+                'station_id': r.get('verified_station_id') or r.get('suggested_station_id'),
+                'station_name': r.get('station_name'),
+                'status': r.get('status'),
+            }
+    return None
+
+
+def classify_flaw_day(row: dict) -> dict:
+    """Map a packed flaw day to a FlowBetter teaching pattern (not an approval)."""
+    cancel = row.get('dep_cancel_rate')
+    cancel = float(cancel) if cancel is not None else 0.0
+    delay15 = row.get('dep_delay15_rate')
+    delay15 = float(delay15) if delay15 is not None else 0.0
+    wx_min = float(row.get('weather_delay_min') or 0)
+    late_min = float(row.get('late_aircraft_delay_min') or 0)
+    year = int(row.get('year') or 0)
+    month = int(row.get('month') or 0)
+    airport = row.get('airport')
+
+    if year == 2020 and month in (3, 4, 5) and wx_min < 50:
+        pattern = PATTERN_COVID_DEMAND
+        desk = (
+            'COVID demand/schedule shock — not weather. FlowBetter has no schedule-trim lever; '
+            'do not train cancel-bank as the “right” COVID answer.'
+        )
+        strategies = {
+            'cfo': 'No demand-cut tool; absorb framing does not model collapsed bookings.',
+            'loyalty': 'Ferry/reserve spend is the wrong lever for empty banks.',
+            'operations': 'Cancel tool exists but for the wrong reason — need a demand-shock profile.',
+        }
+        teaching = 'partial_mismatch'
+    elif cancel >= 0.67 and airport in ('JFK', 'DCA', 'BOS'):
+        pattern = PATTERN_SNOWZILLA
+        desk = (
+            'Snowzilla-scale multi-airport stop. Absorb and ferry-first fail crew legality in the '
+            'sandbox; cancel-first Operations is the only feasible teaching path once holds wipe the last bank.'
+        )
+        strategies = {
+            'cfo': 'Infeasible — forcing fly wrecks duty/network on near-total cancel days.',
+            'loyalty': 'Infeasible — ferries do not clear multi-hour multi-airport closures.',
+            'operations': 'Feasible teaching path — cancel last bank; passenger pillar correctly explodes.',
+        }
+        teaching = 'operations_only'
+    elif airport == 'ORD' and cancel >= 0.4 and (late_min >= 3000 or delay15 >= 0.6):
+        pattern = PATTERN_ORD_WINTER
+        desk = (
+            'ORD winter cancel+delay with late-aircraft cascade. Ferry helps one rotation; '
+            'Operations cancel-bank protects overnight when the last ORD bank is cut.'
+        )
+        strategies = {
+            'cfo': 'Likely infeasible — duty/network fail under long weather+late-aircraft minutes.',
+            'loyalty': 'Partial — ferry helps one rotation; still weak on system late-aircraft.',
+            'operations': 'Closer teaching fit — cancel last bank, protect overnight network pillar.',
+        }
+        teaching = 'operations_favored'
+    elif wx_min > 0 or cancel >= 0.25:
+        pattern = PATTERN_WEATHER_STORM
+        desk = (
+            'Weather-driven cancel/delay day. Desk should separate passenger vs network priorities '
+            'among feasible plans — no blended winner.'
+        )
+        strategies = {
+            'cfo': 'Cheap absorb only works on short single-airport bumps; fails on long holds.',
+            'loyalty': 'Useful when metal/crew exist and today’s connections matter.',
+            'operations': 'Use when tomorrow’s overnight position matters more than today’s flown load.',
+        }
+        teaching = 'pillar_tradeoff'
+    else:
+        pattern = PATTERN_GENERIC
+        desk = 'Generic disruption sample — cite packed cancel/delay minutes; human chooses the pillar trade.'
+        strategies = {
+            'cfo': 'Compare financial cost only after hard crew checks pass.',
+            'loyalty': 'Passenger pillar priority among feasible Pareto options.',
+            'operations': 'Network/overnight pillar priority among feasible Pareto options.',
+        }
+        teaching = 'context_only'
+
+    return {
+        'pattern': pattern,
+        'teaching': teaching,
+        'desk_read': desk,
+        'strategy_hints': strategies,
+        'approves': False,
+    }
+
+
+def strategy_mapping(airport: str | None = None, limit: int = 5):
+    """Top flaw days with FlowBetter CFO/Loyalty/Operations teaching hints."""
+    rows = flaw_days(airport, limit)
+    return [{
+        **{k: r.get(k) for k in (
+            'airport', 'date', 'dep_cancel_rate', 'dep_delay15_rate',
+            'weather_delay_min', 'late_aircraft_delay_min', 'disruption_score',
+        )},
+        **classify_flaw_day(r),
+    } for r in rows]
+
+
+def _disruption_airports(disruptions):
+    hits = []
+    seen = set()
+    for d in disruptions or []:
+        ap = d.get('airport')
+        if not ap or ap not in AIRPORTS or ap in seen:
+            continue
+        seen.add(ap)
+        hits.append(d)
+    return hits
+
+
+def pillar_implications(disruptions=None):
+    """Four-pillar desk implications for airports touched by the synthetic scenario."""
+    notes = []
+    kinds = {d.get('kind') for d in (disruptions or [])}
+    airports = [d.get('airport') for d in _disruption_airports(disruptions)]
+    weatherish = bool(kinds & {'weather', 'hold', 'deice', 'de-icing'}) or any(
+        'weather' in (d.get('label') or '').lower()
+        or 'de-ic' in (d.get('label') or '').lower()
+        or 'ifr' in (d.get('label') or '').lower()
+        for d in (disruptions or [])
+    )
+    overnight = 'overnight' in kinds or any(
+        'overnight' in (d.get('label') or '').lower() for d in (disruptions or [])
+    )
+    duty = 'crew' in kinds or 'duty' in kinds or any(
+        'duty' in (d.get('label') or '').lower() for d in (disruptions or [])
+    )
+
+    if weatherish or any(a in ('ORD', 'JFK', 'BOS', 'DCA') for a in airports):
+        notes.append({
+            'pillar': 'financial',
+            'read': 'Storm-linked holds raise delay minutes ($100/m) before any ferry/cancel spend — cash looks cheap until legality fails.',
+        })
+        notes.append({
+            'pillar': 'passenger',
+            'read': 'Loyalty (ferry+reserve) protects today’s connections when metal exists; Operations cancel-bank spikes passenger pts via assumed overnight delay.',
+        })
+    if overnight or 'PIT' in airports or 'ORD' in airports:
+        notes.append({
+            'pillar': 'network',
+            'read': 'Overnight PIT position is the network pillar — out-of-place tails cost 20k soft pts each; Operations cancel-bank is the teaching lever that zeros that penalty.',
+        })
+    if duty or overnight:
+        notes.append({
+            'pillar': 'crew',
+            'read': 'Hard gate: negative crew buffer rejects the plan. On Snowzilla-scale history, CFO/Loyalty often go illegal; Operations stays legal when the last bank is cancelled.',
+        })
+    if not notes:
+        notes = [
+            {'pillar': 'financial', 'read': 'Compare cash only among crew-legal plans.'},
+            {'pillar': 'passenger', 'read': 'Loyalty vs Operations is usually today’s pax vs tomorrow’s bank.'},
+            {'pillar': 'network', 'read': 'Protect PIT overnight tails when the hub priority is tomorrow.'},
+            {'pillar': 'crew', 'read': 'Discard any plan with failed hard crew checks — no blended score rescues it.'},
+        ]
+    return {
+        'airports': airports,
+        'implications': notes,
+        'decision_rule': (
+            'Discard hard-check failures first. Among feasible Pareto options, pick the hub priority '
+            '(Loyalty → passengers; Operations → overnight network). Never average the four pillars. Never auto-approve.'
+        ),
+    }
+
+
+def _relevant_flaws(airport: str, disruption: dict, limit: int = 3):
+    """Prefer weather-linked history for weather/overnight pressure; still pack-only."""
+    kind = (disruption.get('kind') or '').lower()
+    label = (disruption.get('label') or '').lower()
+    weatherish = kind in ('weather', 'hold', 'deice') or any(
+        t in label for t in ('weather', 'de-ic', 'snow', 'ifr', 'storm')
+    )
+    overnightish = kind == 'overnight' or 'overnight' in label
+    if weatherish or overnightish:
+        preferred = flaw_days(airport, limit, weather_only=True)
+        if preferred:
+            return preferred
+    # Default: skip pure COVID demand rows when the desk is not asking about COVID.
+    rows = []
+    for r in flaw_days(airport, 12):
+        if classify_flaw_day(r)['pattern'] == PATTERN_COVID_DEMAND and not weatherish:
+            continue
+        rows.append(r)
+        if len(rows) >= limit:
+            break
+    return rows or flaw_days(airport, limit)
+
+
+def scenario_context(disruptions=None):
+    """Aggregate historical context for airports touched by the current synthetic scenario."""
+    hits = []
+    for d in _disruption_airports(disruptions):
+        ap = d.get('airport')
+        otp = otp_year(ap, 2024)
+        wx = weather_year(ap, 2022)
+        flaws = _relevant_flaws(ap, d, 3)
+        mapped = [classify_flaw_day(f) | {
+            'date': f.get('date'),
+            'dep_cancel_rate': f.get('dep_cancel_rate'),
+            'weather_delay_min': f.get('weather_delay_min'),
+        } for f in flaws]
+        hits.append({
+            'airport': ap,
+            'disruption_kind': d.get('kind'),
+            'disruption_label': d.get('label'),
+            'otp_2024': otp[0] if otp else None,
+            'weather_2022': wx[0] if wx else None,
+            'recent_flaw_days': flaws,
+            'strategy_hints': mapped,
+        })
+    return {
+        'touched': hits,
+        'pillars': pillar_implications(disruptions),
+        'scope': SCOPE,
+    }
+
+def flight_insight(origin: str, destination: str, month: int, year: int | None = None):
+    """Teaching brief for a user-entered city-pair using bundled decade logs.
+
+    Not a live schedule/weather product — historical context only.
+    """
+    origin = _airport(origin)
+    destination = _airport(destination)
+    if origin is None or destination is None:
+        raise ValueError('Origin and destination are required')
+    if origin == destination:
+        raise ValueError('Origin and destination must differ')
+    month = int(month)
+    if month < 1 or month > 12:
+        raise ValueError('Month must be 1–12')
+    year = int(year) if year is not None else 2024
+    if year < 2016 or year > 2025:
+        raise ValueError('Year must be 2016–2025')
+
+    season = (
+        'winter' if month in (12, 1, 2) else
+        'spring' if month in (3, 4, 5) else
+        'summer' if month in (6, 7, 8) else
+        'fall'
+    )
+    weather_ref_year = 2022 if season == 'winter' else year
+
+    def _airport_block(code: str, role: str):
+        otp_rows = otp_year(code, year)
+        otp = otp_rows[0] if otp_rows else None
+        wx_rows = weather_year(code, weather_ref_year)
+        wx = wx_rows[0] if wx_rows else None
+        # Prefer flaw days in the same calendar month when available.
+        month_flaws = [f for f in flaw_days(code, limit=40, weather_only=(season in ('winter', 'summer')))
+                       if int(f.get('month') or 0) == month]
+        flaws = (month_flaws or flaw_days(code, limit=5, weather_only=False))[:3]
+        mapped = []
+        for f in flaws:
+            c = classify_flaw_day(f)
+            mapped.append({
+                'date': f.get('date'),
+                'dep_cancel_rate': f.get('dep_cancel_rate'),
+                'dep_delay15_rate': f.get('dep_delay15_rate'),
+                'weather_delay_min': f.get('weather_delay_min'),
+                'pattern': c.get('pattern'),
+                'desk_read': c.get('desk_read'),
+                'teaching': c.get('teaching'),
+            })
+        bullets = []
+        if otp:
+            bullets.append(
+                f"{year} departure OTP {otp.get('dep_ontime_pct')}% · "
+                f"cancel {otp.get('dep_cancelled_pct')}% · "
+                f"weather share of delay causes {otp.get('origin_cause_weather_share_pct')}%"
+            )
+        if wx:
+            bullets.append(
+                f"NOAA {weather_ref_year}: snowfall {wx.get('total_snowfall_in')} in · "
+                f"thunder days {wx.get('thunder_days_WT03')} · "
+                f"fog days {wx.get('fog_days_WT01')} · "
+                f"extreme wind days {wx.get('extreme_wind_days_WSF2_ge_40mph')}"
+            )
+        if mapped:
+            top = mapped[0]
+            cancel = top.get('dep_cancel_rate')
+            cancel_pct = round(float(cancel) * 100, 1) if cancel is not None else None
+            bullets.append(
+                f"Sample disruption day {top.get('date')}"
+                + (f" · {cancel_pct}% departures cancelled" if cancel_pct is not None else '')
+                + (f" · {top.get('pattern')}" if top.get('pattern') else '')
+            )
+        return {
+            'airport': code,
+            'role': role,
+            'otp': otp,
+            'weather': wx,
+            'flaw_days': mapped,
+            'bullets': bullets,
+        }
+
+    origin_block = _airport_block(origin, 'origin')
+    dest_block = _airport_block(destination, 'destination')
+
+    takeaways = [
+        f"{origin}→{destination} in {month}/{year} ({season}) — historical pack context only.",
+    ]
+    if origin_block['otp'] and dest_block['otp']:
+        o, e = origin_block['otp'], dest_block['otp']
+        worse = origin if (o.get('dep_ontime_pct') or 0) <= (e.get('dep_ontime_pct') or 0) else destination
+        takeaways.append(
+            f"In {year}, {worse} had the weaker departure OTP on this pair "
+            f"({origin} {o.get('dep_ontime_pct')}% vs {destination} {e.get('dep_ontime_pct')}%)."
+        )
+    if season == 'winter':
+        takeaways.append('Winter months in this pack often surface snow/late-aircraft cascades — ferry vs cancel-bank trade-offs matter more than annual averages.')
+    elif season == 'summer':
+        takeaways.append('Summer packs emphasize thunder/wind days — short-turn and NAS delay minutes tend to dominate teaching scenarios.')
+    else:
+        takeaways.append('Shoulder seasons still show cancel/delay spikes on sample flaw days; check the listed dates before treating a quiet annual average as typical.')
+    takeaways.append('This is not a live flight prediction or operational recommendation.')
+
+    return {
+        'input': {'origin': origin, 'destination': destination, 'month': month, 'year': year, 'season': season},
+        'airports': [origin_block, dest_block],
+        'takeaways': takeaways,
+        'scope': SCOPE,
+        'sources': ['BTS PREZIP OTP', 'FAA enplanements join', 'NOAA GHCND', 'sample flaw days'],
+    }

@@ -15,3 +15,8 @@ legacy/
 
 node_modules/
 work/
+
+# Local integration artifacts
+flow-better-integrated.bundle
+flow-better-website.zip
+*.bundle

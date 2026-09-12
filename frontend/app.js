@@ -8,10 +8,21 @@ let desk = localStorage.getItem('irop-desk') || 'default';
 $('desk').value = desk;
 const modern = () => state?.scenario.model_version === 2;
 async function api(path, body) {
-  const response = await fetch('/api/' + path, {method: body === undefined ? 'GET' : 'POST', headers: {'Content-Type':'application/json','X-IROP-Desk':desk}, body: body === undefined ? undefined : JSON.stringify(body)});
+  const headers = {'Content-Type':'application/json','X-IROP-Desk':desk};
+  const token = await window.flowbetterAuth?.getAccessToken?.();
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const response = await fetch('/api/' + path, {method: body === undefined ? 'GET' : 'POST', headers, body: body === undefined ? undefined : JSON.stringify(body)});
   const result = await response.json().catch(() => ({detail:'Request rejected'}));
+  if (response.status === 401 && window.flowbetterAuth?.enabled && !token) throw Error('Sign in to use this recovery desk.');
   if (!response.ok) throw Error(typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail));
   return result;
+}
+function authReady() {
+  if (window.flowbetterAuth?.ready) return Promise.resolve();
+  return new Promise(resolve => {
+    window.addEventListener('flowbetter-auth-ready', resolve, {once:true});
+    setTimeout(resolve, 4000);
+  });
 }
 function message(text,error=false) { $('message').textContent=text; $('message').className=error?'error':''; }
 async function action(fn) {
@@ -21,11 +32,28 @@ async function action(fn) {
   finally { busy=false; document.querySelectorAll('button:not(#optionList button)').forEach(b=>b.disabled=false); if(state)render(); else $('scenario').hidden=true; window.refreshLiveControls?.(); }
 }
 function accept(result) {
-  state=result; exp=state.experiments.at(-1);
+  state=result; window.state=state; exp=state.experiments.at(-1);
   selected=exp?.options.find(o=>o.plan===selected?.plan)||exp?.options.find(o=>o.feasible)||exp?.options[0]||null;
   render();
 }
 function currentView() { return $('view').value==='preview'?selected:state[$('view').value]; }
+function renderNetwork() {
+  if(!state)return;
+  const aps=state.scenario.airports, hub=aps.PIT, live=window.liveWeatherOverlay?.();
+  $('network').innerHTML=Object.entries(aps).filter(([a])=>a!=='PIT').map(([a,p])=>{
+    const stroke=live?.[a]?.hold>0?(live[a].color||'#efad58'):'#436b88';
+    return `<path class="route" d="M ${hub.x} ${hub.y} Q ${(hub.x+p.x)/2} ${Math.min(hub.y,p.y)-35} ${p.x} ${p.y}" stroke="${stroke}" stroke-width="${live?.[a]?.hold>0?2.2:1.5}" fill="none" stroke-dasharray="4 4"/>`;
+  }).join('')+Object.entries(aps).map(([a,p])=>{
+    const injected=state.phase!=='baseline'&&state.scenario.disruptions.some(d=>d.airport===a);
+    const liveColor=live?.[a]?.color;
+    const core=liveColor||(injected?'#efad58':'#6ecdc0');
+    const halo=liveColor?`<circle class="wx-halo" cx="${p.x}" cy="${p.y}" r="${a==='PIT'?34:24}" fill="${core}" fill-opacity="0.18"/>`:'';
+    const label=live?.[a]
+      ? `<text x="${p.x}" y="${p.y+(a==='PIT'?66:50)}" text-anchor="middle" class="wx-label" fill="${core}">${esc(live[a].category)}${live[a].hold?` · ${live[a].hold}m`:''}</text>`
+      : (a==='PIT'?`<text x="${p.x}" y="${p.y+52}" text-anchor="middle" style="font-size:9px">OVERNIGHT HUB</text>`:'');
+    return `${halo}<circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?23:14}" fill="#1b3146"/><circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?9:5}" fill="${core}"/><text x="${p.x}" y="${p.y+36}" text-anchor="middle" font-weight="700">${a}</text>${label}`;
+  }).join('');
+}
 function render() {
   if(!state)return;
   $('empty').hidden=true; $('scenario').hidden=false;
@@ -39,11 +67,15 @@ function render() {
     ['Crew buffer',`${scores.crew_buffer.minutes_remaining}m`,scores.crew_buffer.minutes_remaining<0?'Hard constraint failed · modeled duty':'Minimum remaining across operating crews']
   ] : [['Financial cost',money(m.cost),'Archived cost formula'],['Passenger delay',num(m.passenger_minutes),'Archived passenger minutes'],['Missed connections',m.missed_pax,'Archived result'],['Model version','1','Generate a new scenario to use four pillars']];
   $('metrics').innerHTML=metrics.map(([label,value,note])=>`<div class="metric"><span class="label">${label}</span><strong>${value}</strong><small>${note}</small></div>`).join('');
-  const aps=state.scenario.airports, hub=aps.PIT;
-  $('network').innerHTML=Object.entries(aps).filter(([a])=>a!=='PIT').map(([a,p])=>`<path d="M ${hub.x} ${hub.y} Q ${(hub.x+p.x)/2} ${Math.min(hub.y,p.y)-35} ${p.x} ${p.y}" stroke="#436b88" stroke-width="1.5" fill="none" stroke-dasharray="4 4"/>`).join('')+Object.entries(aps).map(([a,p])=>`<circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?23:14}" fill="#1b3146"/><circle cx="${p.x}" cy="${p.y}" r="${a==='PIT'?9:5}" fill="${state.phase!=='baseline'&&state.scenario.disruptions.some(d=>d.airport===a)?'#efad58':'#6ecdc0'}"/><text x="${p.x}" y="${p.y+36}" text-anchor="middle" font-weight="700">${a}</text>${a==='PIT'?`<text x="${p.x}" y="${p.y+52}" text-anchor="middle" style="font-size:9px">OVERNIGHT HUB</text>`:''}`).join('');
-  $('disruptions').innerHTML=state.scenario.disruptions.map(d=>`<div class="disruption"><b>${esc(d.id)}</b><div>${esc(d.label)}<small>${esc(d.kind.replaceAll('_',' ').toUpperCase())} · ${state.phase==='baseline'?'Ready to inject':'Applied'}</small></div></div>`).join('');
+  if(typeof paintNetwork==='function') paintNetwork(); else renderNetwork();
+  const profileNote=state.scenario.profile_note?`<p class="muted">Profile · <strong>${esc(state.scenario.profile||'default')}</strong> — ${esc(state.scenario.profile_note)}</p>`:'';
+  $('disruptions').innerHTML=profileNote+state.scenario.disruptions.map(d=>{
+    const bts=d.bts_source;
+    const cite=bts?` · BTS ${esc(bts.date)} · ${bts.dep_cancelled}/${bts.dep_flights} cancelled (${(100*(bts.dep_cancel_rate||0)).toFixed(1)}%) · ${Number(bts.weather_delay_min||0).toLocaleString()} wx-delay min`:'';
+    return `<div class="disruption"><b>${esc(d.id)}</b><div>${esc(d.label)}<small>${esc(d.kind.replaceAll('_',' ').toUpperCase())} · ${state.phase==='baseline'?'Ready to inject':'Applied'}${cite}</small></div></div>`;
+  }).join('');
   $('signals').innerHTML=(state.scenario.unstructured_signals||[]).map(s=>`<div class="signal-box"><span class="eyebrow">UNSTRUCTURED INPUT · ${esc(s.id)}</span><blockquote>${esc(s.text)}</blockquote><p>Bounded parser extracts airport and added turnaround minutes. Source window: ${time(s.start)}–${time(s.end)}. Original text is preserved as evidence.</p></div>`).join('');
-  $('disrupt').disabled=busy||!modern()||state.phase!=='baseline'; $('disrupt').textContent=state.phase==='baseline'?'Inject four disruptions →':'Disruptions applied ✓';
+  $('disrupt').disabled=busy||!modern()||state.phase!=='baseline'; $('disrupt').textContent=state.phase==='baseline'?'Apply '+state.scenario.disruptions.length+' disruptions →':'Disruptions applied ✓';
   $('evaluate').disabled=busy||!modern()||state.phase!=='disrupted';
   const d=state.disrupted;
   $('cascade').textContent=d?`Without recovery: ${d.metrics.delayed_flights} delayed flights · ${d.metrics.missed_pax} missed connecting passengers · ${d.evidence.filter(e=>e.hard!==false&&!e.passed).length} failed hard checks.`:'';
@@ -52,14 +84,23 @@ function render() {
 function selectPlan(plan) { selected=exp.options.find(o=>o.plan===plan);$('view').value='preview';renderOptions();renderTimeline(); }
 async function approvePlan(plan) {
   await action(async()=>{
-    $('view').value='current';accept(await api(`scenarios/${state.id}/approve`,{revision:state.revision,experiment_id:exp.id,plan,confirm:true}));
-    message('Approved in simulation. The chosen schedule, four scores and evidence are saved.');await loadHistory();
+    try {
+      $('view').value='current';accept(await api(`scenarios/${state.id}/approve`,{revision:state.revision,experiment_id:exp.id,plan,confirm:true}));
+      message('Approved in simulation. The chosen schedule, four scores and evidence are saved.');await loadHistory();
+    } catch (error) {
+      if (window.flowbetterAuth?.enabled && /insufficient_scope|approve:recovery/.test(error.message)) {
+        message('Approval needs a fresh MFA confirmation. Confirm identity, then approve again.');
+        await window.flowbetterAuth.stepUp();
+        return;
+      }
+      throw error;
+    }
   });
 }
 function renderOptions() {
-  const current=!!(modern()&&state.phase==='disrupted'&&exp?.status==='completed'&&exp.revision===state.revision&&!busy);
+  const current=!!(modern()&&state.phase==='disrupted'&&exp?.status==='completed'&&exp.revision===state.revision&&!busy&&(typeof window.flowbetterAuth?.can!=='function'||window.flowbetterAuth.can('approve:recovery')));
   const options=modern()&&exp?.options.every(o=>o.scores)?exp.options:[];
-  const placeholder=!modern()?'Archived scenario: generate a new schedule to use the three recovery strategies.':state.phase==='baseline'?'Inject the four disruptions, then compare the three recovery strategies.':'Compare plans to calculate financial, passenger, network and crew outcomes.';
+  const placeholder=!modern()?'Archived scenario: generate a new schedule to use the three recovery strategies.':state.phase==='baseline'?'Inject the selected disruptions, then compare the three recovery strategies.':'Compare plans to calculate financial, passenger, network and crew outcomes.';
   window.renderRecoveryCards?.({options,selectedPlan:selected?.plan,onSelect:selectPlan,onApprove:approvePlan,current,placeholder});
   $('optionStatus').textContent=exp&&exp.revision!==state.revision ? (state.phase==='recovered'?'Decision saved. These are the evaluated options for the approved revision.':'Earlier-revision experiment: review only. Compare again before approval.') : exp?.status==='failed' ? 'Planner failed. No option from this experiment can be approved.' : 'Three independent impact measures, plus crew as a hard constraint. Relative bars include rejected candidates. No hidden weighted score.';
   if(!options.length||!selected?.scores) { $('selection').innerHTML='';$('workflow').innerHTML='';return; }
@@ -88,13 +129,91 @@ async function loadHistory() {
   $('historyList').innerHTML=history.length?history.map(h=>`<div class="history-row"><div>${esc(h.name)} <small>${esc(h.phase)} · revision ${h.revision} · ${esc(new Date(h.created).toLocaleString())}</small></div><button class="quiet" data-load="${h.id}">Open →</button></div>`).join(''):'<p class="muted">Saved scenarios, experiments and decisions appear here.</p>';
   $('historyList').querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios/'+b.dataset.load));message(modern()?'Saved scenario loaded.':'Archived scenario loaded for review. Generate a new scenario to evaluate the new model.');}));
 }
-$('generate').onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios',{seed:Number($('seed').value)}));message('60-flight baseline validated. Inject four disruptions to start the recovery comparison.');await loadHistory();});
-$('disrupt').onclick=()=>action(async()=>{accept(await api(`scenarios/${state.id}/disrupt`,{revision:state.revision}));message('Four disruptions applied. ORD’s ground-ops message now changes turnaround math.');await loadHistory();});
+function selectedIssueIds() {
+  return [...document.querySelectorAll('#issueList input[type=checkbox]:checked')].map(el=>el.value);
+}
+let issueProfiles=[];
+let activeIssueProfile=null;
+function syncIssuePicker(fromManual=true) {
+  const boxes=[...document.querySelectorAll('#issueList input[type=checkbox]')];
+  const selected=boxes.filter(b=>b.checked);
+  const max=Number($('issueList')?.dataset.max||4);
+  $('issueCount').textContent=`${selected.length} / ${max} selected`;
+  boxes.forEach(b=>{b.disabled=!b.checked&&selected.length>=max;});
+  if(fromManual){
+    const ids=new Set(selected.map(b=>b.value));
+    const match=issueProfiles.find(p=>p.issue_ids.length===ids.size&&p.issue_ids.every(id=>ids.has(id)));
+    activeIssueProfile=match?.id||null;
+    renderIssueProfiles();
+  }
+}
+function applyIssueProfile(profileId) {
+  const pack=issueProfiles.find(p=>p.id===profileId);
+  if(!pack) return;
+  activeIssueProfile=profileId;
+  const want=new Set(pack.issue_ids);
+  document.querySelectorAll('#issueList input[type=checkbox]').forEach(box=>{box.checked=want.has(box.value);});
+  syncIssuePicker(false);
+  renderIssueProfiles();
+  message(`${pack.label} profile selected · ${pack.issue_ids.length} issues pre-filled. Generate to apply.`);
+}
+function renderIssueProfiles() {
+  const host=$('issueProfiles');
+  if(!host) return;
+  if(!issueProfiles.length){host.innerHTML='';return;}
+  host.innerHTML=issueProfiles.map(p=>`
+    <button type="button" class="profile-pack ${activeIssueProfile===p.id?'active':''}" data-profile="${esc(p.id)}" aria-pressed="${activeIssueProfile===p.id}">
+      <strong>${esc(p.label)} profile</strong>
+      <small>${esc(p.description)}</small>
+    </button>`).join('');
+  host.querySelectorAll('[data-profile]').forEach(btn=>{
+    btn.onclick=()=>applyIssueProfile(btn.dataset.profile);
+  });
+}
+async function loadIssueCatalog() {
+  const catalog=await api('disruption-issues');
+  const max=catalog.max_select||4;
+  issueProfiles=catalog.profiles||[];
+  $('issueList').dataset.max=String(max);
+  $('issueList').innerHTML=(catalog.issues||[]).map(issue=>`
+    <label class="issue-option">
+      <input type="checkbox" value="${esc(issue.id)}" data-issue="${esc(issue.id)}">
+      <span><strong>${esc(issue.label)}</strong><small>${esc(issue.description)}</small></span>
+    </label>`).join('');
+  $('issueList').querySelectorAll('input[type=checkbox]').forEach(box=>{
+    box.addEventListener('change',()=>syncIssuePicker(true));
+  });
+  renderIssueProfiles();
+  syncIssuePicker(false);
+}
+$('generate').onclick=()=>action(async()=>{
+  const seed=Number($('seed').value);
+  if(!Number.isInteger(seed)||seed<0||seed>999999) throw Error('Seed must be an integer from 0 to 999999.');
+  const issue_ids=selectedIssueIds();
+  if(issue_ids.length>4) throw Error('Select at most 4 disruption issues.');
+  const body={seed,issue_ids};
+  if(activeIssueProfile) body.profile=activeIssueProfile;
+  selected=null;$('view').value='current';accept(await api('scenarios/from-issues',body));
+  const packNote=activeIssueProfile?` (${activeIssueProfile} profile)`:'';
+  message(`60-flight baseline validated with ${issue_ids.length} selected issue${issue_ids.length===1?'':'s'}${packNote}. Apply disruptions to start the recovery comparison.`);await loadHistory();
+});
+$('randomSeed').onclick=()=>{$('seed').value=Math.floor(Math.random()*1000000);$('seed').dispatchEvent(new Event('input'));message('Seed set to '+$('seed').value+'. Generate to build that day.');};
+$('seed').addEventListener('input',()=>{const n=Number($('seed').value);if(!Number.isInteger(n)||n<0||n>999999)$('seed').setCustomValidity('Use an integer from 0 to 999999');else $('seed').setCustomValidity('');});
+$('disrupt').onclick=()=>action(async()=>{accept(await api(`scenarios/${state.id}/disrupt`,{revision:state.revision}));message('Selected disruptions applied. Ground-ops source messages stay attached as evidence when present.');await loadHistory();});
 $('evaluate').onclick=()=>action(async()=>{message($('live').checked?'OpenAI is requesting bounded simulations…':'Calculating three strategies across four pillars…');accept(await api(`scenarios/${state.id}/experiments`,{revision:state.revision,mode:$('live').checked?'live':'local',consent:$('consent').checked}));message(exp?.status==='failed'?'Workflow failed: '+exp.error:'Three strategies calculated. Inspect the math, compare the trade-offs, and choose a feasible plan.',exp?.status==='failed');await loadHistory();});
 $('live').onchange=()=>{$('consentLabel').hidden=!$('live').checked;$('aiStatus').textContent=$('live').checked?'OpenAI planner · aggregate evidence only':'Deterministic planner · no LLM';};
 $('view').onchange=renderTimeline;$('rotation').onchange=renderTimeline;
 for(let i=1;i<=10;i++)$('rotation').insertAdjacentHTML('beforeend',`<option value="${i}">Rotation ${i}</option>`);
 $('refresh').onclick=()=>action(loadHistory);
-$('switchDesk').onclick=()=>action(async()=>{const next=$('desk').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(next))throw Error('Use a valid desk ID.');desk=next;localStorage.setItem('irop-desk',desk);state=null;selected=null;exp=null;$('scenario').hidden=true;$('empty').hidden=false;$('events').innerHTML='';await loadHistory();await window.reloadObservations?.();message('Switched to desk '+desk);});
+$('switchDesk').onclick=()=>action(async()=>{const next=$('desk').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(next))throw Error('Use a valid desk ID.');desk=next;localStorage.setItem('irop-desk',desk);state=null;window.state=null;selected=null;exp=null;$('scenario').hidden=true;$('empty').hidden=false;$('events').innerHTML='';await loadHistory();await window.reloadObservations?.();message('Switched to desk '+desk);});
 window.addEventListener('recovery-cards-ready',()=>{if(state)renderOptions();});
-(async()=>{try{const status=await api('status');if(!status.live_available){$('live').disabled=true;$('aiStatus').textContent='Deterministic planner · live AI requires server credentials';}await loadHistory();}catch(error){message(error.message,true);}})();
+(async()=>{
+  await authReady();
+  if (window.flowbetterAuth?.enabled && !window.flowbetterAuth.user) {
+    message('Sign in with Auth0 to generate, compare, or approve a recovery plan.');
+    $('generate').disabled=true;
+    return;
+  }
+  if (window.flowbetterAuth?.desk) { desk=window.flowbetterAuth.desk; $('desk').value=desk; }
+  try{const status=await api('status');if(!status.live_available){$('live').disabled=true;$('aiStatus').textContent='Deterministic planner · live AI requires server credentials';}await loadIssueCatalog();await loadHistory();}catch(error){message(error.message,true);}
+})();

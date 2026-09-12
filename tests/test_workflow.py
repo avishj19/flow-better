@@ -22,6 +22,10 @@ def test_local():
     assert r['status']=='completed' and r['recommendation'] is None
     assert r['feasible_plans']==['loyalty','operations'] and len(r['options'])==3
     assert 'No language model ran' in r['explanation'] and saved[-1]['status']=='completed'
+    assert any(t['action']=='inspect_overnight_hub' for t in r['trace'])
+    assert any(t['action']=='inspect_network' for t in r['trace'])
+    payload=next(t['data'] for t in r['trace'] if t['action']=='inspect_scenario')
+    assert payload['hub']=='PIT' and payload['overnight_hubs']['PIT']==10
 
 def test_live_scripted_aggregate_only_and_encrypted_context():
     seen=[];encrypted={'type':'reasoning','id':'opaque','encrypted_content':'opaque-ciphertext'}
@@ -71,7 +75,8 @@ def test_provider_contract(monkeypatch):
         assert url=='https://api.openai.com/v1/responses'
         assert json['store'] is False and json['parallel_tool_calls'] is False
         assert json['include']==['reasoning.encrypted_content']
-        assert json['tools'][1]['parameters']['properties']['plan']['enum']==['cfo','loyalty','operations']
+        assert json['tools'][3]['parameters']['properties']['plan']['enum']==['cfo','loyalty','operations']
+        assert len(json['tools'])==4
         class Response:
             def raise_for_status(self):pass
             def json(self):return {'output':[]}

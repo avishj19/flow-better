@@ -31,7 +31,7 @@ export function RecoveryOptionCard({option, options, selected, onSelect, onAppro
     <div className="option-status"><span>{rejected ? 'REJECTED · HARD CONSTRAINT' : 'FEASIBLE · YOUR DECISION'}</span><span>{option.pareto_optimal ? 'TRADE-OFF' : ''}</span></div>
     <h3>{option.title}</h3><p className="strategy">{option.description}</p>
     <PillarBar label="Financial cost" value={scores.financial_cost} values={options.map(o=>o.scores.financial_cost)} money />
-    <PillarBar label="Passenger impact" value={scores.passenger_impact} values={options.map(o=>o.scores.passenger_impact)} unit="pts" />
+    <PillarBar label="Passenger impact (model points)" value={scores.passenger_impact} values={options.map(o=>o.scores.passenger_impact)} unit="pts" />
     <PillarBar label="Network health penalty" value={scores.network_health} values={options.map(o=>o.scores.network_health)} unit="pts" />
     <div className={`crew-buffer ${option.isLegal ? 'pass' : 'fail'}`}><b>Crew buffer · hard constraint</b><p>{crewStatus(option)}</p><small>Simplified Part 117-inspired model, not a finding of FAA legality.</small></div>
     <div className="operation-counts">{option.metrics.delayed_flights} delayed · {option.details.cancelled} cancelled · {option.details.ferries} ferries</div>

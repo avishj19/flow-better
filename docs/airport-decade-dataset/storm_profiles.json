@@ -1,0 +1,189 @@
+{
+  "scope": "Teaching storm profiles for FlowBetter \u00b7 hold windows are synthetic evening-bank mocks sized from packed BTS PREZIP flaw-day cancel/delay values \u00b7 not FAA closures or carrier SOC replays",
+  "source_of_truth": "docs/airport-decade-dataset/major_flaw_days.csv",
+  "profiles": {
+    "default": {
+      "id": "default",
+      "note": "Standard seed disruptions (maintenance, ORD de-icing signal, crew limit, overnight).",
+      "airports": [],
+      "bts_anchor_days": []
+    },
+    "snowzilla_ne": {
+      "id": "snowzilla_ne",
+      "note": "Northeast winter stop sized from BTS PREZIP flaw days.",
+      "pattern": "snowzilla_scale",
+      "bts_anchor_days": [
+        {
+          "airport": "JFK",
+          "date": "2022-01-29",
+          "dep_flights": 355,
+          "dep_cancelled": 334,
+          "dep_cancel_rate": 0.9408,
+          "dep_delay15_rate": 1.0,
+          "avg_dep_delay": 179.14,
+          "weather_delay_min": 2528.0,
+          "late_aircraft_delay_min": 712.0,
+          "disruption_score": 2.8816,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv"
+        },
+        {
+          "airport": "DCA",
+          "date": "2022-01-03",
+          "dep_flights": 387,
+          "dep_cancelled": 366,
+          "dep_cancel_rate": 0.9457,
+          "dep_delay15_rate": 0.5238,
+          "avg_dep_delay": 120.76,
+          "weather_delay_min": 1414.0,
+          "late_aircraft_delay_min": 920.0,
+          "disruption_score": 2.4152,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv"
+        },
+        {
+          "airport": "BOS",
+          "date": "2019-01-20",
+          "dep_flights": 290,
+          "dep_cancelled": 226,
+          "dep_cancel_rate": 0.7793,
+          "dep_delay15_rate": 0.75,
+          "avg_dep_delay": 104.7,
+          "weather_delay_min": 4009.0,
+          "late_aircraft_delay_min": 1305.0,
+          "disruption_score": 2.3086,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv"
+        }
+      ],
+      "airports": [
+        {
+          "airport": "JFK",
+          "date": "2022-01-29",
+          "dep_flights": 355,
+          "dep_cancelled": 334,
+          "dep_cancel_rate": 0.9408,
+          "dep_delay15_rate": 1.0,
+          "avg_dep_delay": 179.14,
+          "weather_delay_min": 2528.0,
+          "late_aircraft_delay_min": 712.0,
+          "disruption_score": 2.8816,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv",
+          "hold_start": 1080,
+          "hold_end": 1320,
+          "hold_minutes": 240,
+          "hold_rule": "teaching_mock_from_bts_cancel_rate_and_avg_dep_delay"
+        },
+        {
+          "airport": "DCA",
+          "date": "2022-01-03",
+          "dep_flights": 387,
+          "dep_cancelled": 366,
+          "dep_cancel_rate": 0.9457,
+          "dep_delay15_rate": 0.5238,
+          "avg_dep_delay": 120.76,
+          "weather_delay_min": 1414.0,
+          "late_aircraft_delay_min": 920.0,
+          "disruption_score": 2.4152,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv",
+          "hold_start": 1080,
+          "hold_end": 1320,
+          "hold_minutes": 240,
+          "hold_rule": "teaching_mock_from_bts_cancel_rate_and_avg_dep_delay"
+        },
+        {
+          "airport": "BOS",
+          "date": "2019-01-20",
+          "dep_flights": 290,
+          "dep_cancelled": 226,
+          "dep_cancel_rate": 0.7793,
+          "dep_delay15_rate": 0.75,
+          "avg_dep_delay": 104.7,
+          "weather_delay_min": 4009.0,
+          "late_aircraft_delay_min": 1305.0,
+          "disruption_score": 2.3086,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv",
+          "hold_start": 1100,
+          "hold_end": 1340,
+          "hold_minutes": 240,
+          "hold_rule": "teaching_mock_from_bts_cancel_rate_and_avg_dep_delay"
+        }
+      ]
+    },
+    "ord_winter": {
+      "id": "ord_winter",
+      "note": "ORD-centered winter cascade sized from BTS PREZIP cancel + weather/late-aircraft minutes.",
+      "pattern": "ord_winter_cascade",
+      "bts_anchor_days": [
+        {
+          "airport": "ORD",
+          "date": "2019-01-28",
+          "dep_flights": 891,
+          "dep_cancelled": 463,
+          "dep_cancel_rate": 0.5196,
+          "dep_delay15_rate": 0.7827,
+          "avg_dep_delay": 113.09,
+          "weather_delay_min": 11412.0,
+          "late_aircraft_delay_min": 26286.0,
+          "disruption_score": 1.8219,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv"
+        },
+        {
+          "airport": "DTW",
+          "date": "2024-01-12",
+          "dep_flights": 320,
+          "dep_cancelled": 116,
+          "dep_cancel_rate": 0.3625,
+          "dep_delay15_rate": 0.3971,
+          "avg_dep_delay": 129.38,
+          "weather_delay_min": 19377.0,
+          "late_aircraft_delay_min": 1477.0,
+          "disruption_score": 1.1221,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv"
+        }
+      ],
+      "airports": [
+        {
+          "airport": "ORD",
+          "date": "2019-01-28",
+          "dep_flights": 891,
+          "dep_cancelled": 463,
+          "dep_cancel_rate": 0.5196,
+          "dep_delay15_rate": 0.7827,
+          "avg_dep_delay": 113.09,
+          "weather_delay_min": 11412.0,
+          "late_aircraft_delay_min": 26286.0,
+          "disruption_score": 1.8219,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv",
+          "hold_start": 1120,
+          "hold_end": 1349,
+          "hold_minutes": 229,
+          "hold_rule": "teaching_mock_from_bts_cancel_rate_and_avg_dep_delay"
+        },
+        {
+          "airport": "DTW",
+          "date": "2024-01-12",
+          "dep_flights": 320,
+          "dep_cancelled": 116,
+          "dep_cancel_rate": 0.3625,
+          "dep_delay15_rate": 0.3971,
+          "avg_dep_delay": 129.38,
+          "weather_delay_min": 19377.0,
+          "late_aircraft_delay_min": 1477.0,
+          "disruption_score": 1.1221,
+          "source": "BTS PREZIP \u00b7 major_flaw_days.csv",
+          "hold_start": 1140,
+          "hold_end": 1362,
+          "hold_minutes": 222,
+          "hold_rule": "teaching_mock_from_bts_cancel_rate_and_avg_dep_delay"
+        }
+      ],
+      "ground_ops_extra_turn_minutes": 57,
+      "ground_ops_source": {
+        "airport": "ORD",
+        "date": "2019-01-28",
+        "avg_dep_delay": 113.09,
+        "late_aircraft_delay_min": 26286.0,
+        "weather_delay_min": 11412.0,
+        "rule": "extra_turn = clamp(45,90, round(avg_dep_delay/2)) from BTS ORD flaw day"
+      }
+    }
+  }
+}

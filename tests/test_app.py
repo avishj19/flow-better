@@ -28,8 +28,10 @@ def test_full_flow_persistence_stale_and_rejected(client):
 def test_desk_isolation_origin_and_validation(client):
     r=client.post('/api/scenarios',json={}).json()
     assert client.get('/api/scenarios/'+r['id'],headers={'X-IROP-Desk':'other'}).status_code==404
-    assert client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'}).status_code==400
-    assert client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'}).status_code==403
+    bad_desk=client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'})
+    assert bad_desk.status_code==400 and bad_desk.json()['detail']
+    blocked=client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'})
+    assert blocked.status_code==403 and blocked.json()['detail']=='Cross-origin writes forbidden'
     assert client.post('/api/scenarios',json={},headers={'Origin':'http://127.0.0.1:8010'}).status_code==200
     assert client.post('/api/scenarios',json={'seed':True}).status_code==422
 
@@ -55,3 +57,30 @@ def test_archive_readonly(client):
     r=client.post('/api/scenarios',json={}).json();r['scenario'].pop('model_version');store.save_run(a.DATA,r)
     assert client.get('/api/scenarios/'+r['id']).status_code==200
     assert client.post('/api/scenarios/'+r['id']+'/disrupt',json={'revision':0}).status_code==409
+
+def test_virtual_agent_and_network_endpoints(client):
+    r=client.post('/api/scenarios',json={'seed':42}).json()
+    assert r['name'].startswith('PIT overnight hub')
+    assert client.get('/api/status').json()['virtual_agent'] is True
+    net=client.get(f"/api/scenarios/{r['id']}/network").json()
+    assert net['hub']=='PIT' and net['overnight_hubs']['DTW']['tails']==['R01','R02']
+    assert net['overnight_hubs']['ORD']['tails']==['R03']
+    chat=client.post(f"/api/scenarios/{r['id']}/agent",json={'message':'Brief the overnight hubs'}).json()
+    assert chat['topic']=='overnight_hub' and 'PIT' in chat['highlights']
+    assert client.post(f"/api/scenarios/{r['id']}/agent",json={'message':''}).status_code==422
+    starters=client.get('/api/agent/starters').json()
+    assert 'Brief the overnight hubs' in starters['prompts']
+
+def test_decade_analysis_on_demand(client):
+    status=client.get('/api/analysis/status').json()
+    assert status['available'] and status['airports'][0]=='PIT'
+    starters=client.get('/api/analysis/starters').json()
+    assert 'Rank 2024 on-time performance' in starters['prompts']
+    bare=client.post('/api/analysis/ask',json={'message':'Rank 2024 on-time performance'}).json()
+    assert bare['status']=='completed' and bare['topic']=='otp_rank' and 'PIT' in bare['reply']
+    assert client.post('/api/analysis/ask',json={'message':'hi','mode':'live','consent':False}).status_code==422
+    r=client.post('/api/scenarios',json={'seed':42}).json()
+    client.post(f"/api/scenarios/{r['id']}/disrupt",json={'revision':0})
+    ctx=client.post(f"/api/scenarios/{r['id']}/analysis",json={'message':'Context for this scenario’s airports'}).json()
+    assert ctx['status']=='completed' and ctx['topic']=='scenario' and 'ORD' in ctx['reply']
+    assert 'analysis' in client.get('/api/status').json()
