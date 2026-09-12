@@ -1,0 +1,14 @@
+export const content = {
+  brand: 'FlowBetter',
+  hero: { eyebrow: 'FOR AIRPORT OPERATIONS TEAMS', heading: 'Keep your airport\nmoving.', description: 'When disruption hits, see the bigger picture. Explore the ripple effects. Bring a clearer recovery plan to the table.' },
+  chapters: [
+    { number: '01', label: 'SEE THE DISRUPTION', heading: 'One hold.\nA whole day at stake.', description: 'A late aircraft becomes a longer turnaround. Connections tighten. The next departure slips. Your airport needs a shared picture of what happens next.' },
+    { number: '02', label: 'FOLLOW THE RIPPLE', heading: 'Every decision\nhas a connection.', description: 'Follow how aircraft availability, ground handling, crew constraints, and overnight positioning interact across the flight program.' },
+    { number: '03', label: 'FIND A WAY FORWARD', heading: 'A clearer recovery.\nA shared perspective.', description: 'Compare the consequences before the conversation. Cost, passengers, network position, and crew buffer—visible together, with the final decision left to people.' }
+  ],
+  strategies: [
+    { id: 'cfo', name: 'CFO', theme: 'Protect the budget', description: 'Wait for the original aircraft and crew.', cost: 31500, passengers: 33845, network: 20000, crew: -95, feasible: false, delays: 'The lowest modeled cost comes with a crew constraint.', detail: 'Waiting avoids additional ferry and reserve costs, but the original crew exceeds its modeled duty budget by 95 minutes. This plan is blocked in the simulation.', actions: ['Wait for original resources', 'Accept the downstream delay', 'Crew check blocks approval'] },
+    { id: 'loyalty', name: 'Loyalty', theme: 'Protect the journey', description: 'Use a spare aircraft, a reserve crew, and two ferries.', cost: 37000, passengers: 12635, network: 20000, crew: 50, feasible: true, delays: 'Lower passenger impact. An aircraft still finishes out of position.', detail: 'Additional resources reduce passenger disruption while keeping 50 minutes of modeled crew buffer. One aircraft misses its intended overnight position, leaving a trade-off for the next operating day.', actions: ['Deploy spare and reserve resources', 'Operate two positioning ferries', 'Retain 50 minutes of crew buffer'] },
+    { id: 'operations', name: 'Operations', theme: 'Protect tomorrow', description: 'Cancel the final ORD round trip to restore positioning.', cost: 37000, passengers: 305015, network: 0, crew: 50, feasible: true, delays: 'Restore overnight positioning, with a larger passenger impact.', detail: 'Cancelling the final ORD round trip puts aircraft back at their planned overnight hubs. It preserves crew buffer, but cancellations produce substantially higher modeled passenger impact.', actions: ['Cancel the final ORD round trip', 'Restore planned overnight positions', 'Retain 50 minutes of crew buffer'] }
+  ]
+};
