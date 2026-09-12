@@ -4,6 +4,7 @@ import random
 import re
 
 MODEL_VERSION = 2
+HUB = 'PIT'
 AIRPORTS = {'PIT': (290,180), 'BOS': (510,65), 'JFK': (480,170), 'DCA': (395,285), 'ORD': (90,95), 'DTW': (180,55)}
 PLANS = {
     'cfo': ('The CFO Choice', 'Wait for maintenance and keep the original aircraft and crew.'),
@@ -13,6 +14,68 @@ PLANS = {
 RULES = {'turn':30,'crew_turn':20,'duty':690,'segments':6,'flight_time':420,'rest':600,'connection':35,'gate_window':15}
 CREW_SCOPE = 'Simplified Part 117-inspired duty model; actual FAA legality is not evaluated.'
 FAA_SOURCE = 'https://www.faa.gov/about/office_org/headquarters_offices/agc/practice_areas/regulations/part117/part117_general'
+
+
+def network_snapshot(s, state=None):
+    """Extensive hub-and-spoke + overnight picture for the desk agent and map overlays."""
+    hubs={}
+    for tid, meta in s['tails'].items():
+        hubs.setdefault(meta['overnight_hub'], {'tails': [], 'deadlines': {}})
+        hubs[meta['overnight_hub']]['tails'].append(tid)
+        hubs[meta['overnight_hub']]['deadlines'][tid] = meta['overnight_by']
+    for hub in hubs:
+        hubs[hub]['tails'] = sorted(hubs[hub]['tails'])
+    overnight_pressure = None
+    if state and state.get('details', {}).get('overnight_positions'):
+        overnight_pressure = [
+            {'tail': p['tail'], 'position': p['position'], 'hub': p['hub'],
+             'deadline': p['deadline'], 'out_of_position': p['out_of_position'], 'penalty': p['penalty']}
+            for p in state['details']['overnight_positions']
+        ]
+    elif state and state.get('scores') is not None:
+        # Recompute lightly from viewed flights when details are absent.
+        overnight_pressure = []
+    airport_flow = {a: {'departures': 0, 'arrivals': 0, 'delayed_departures': 0, 'cancelled': 0, 'disrupted': False} for a in s['airports']}
+    for f in s['flights']:
+        airport_flow[f['origin']]['departures'] += 1
+        airport_flow[f['destination']]['arrivals'] += 1
+    if state and state.get('flights'):
+        for f in state['flights']:
+            if f.get('cancelled'):
+                airport_flow[f['origin']]['cancelled'] += 1
+            elif f.get('delay'):
+                airport_flow[f['origin']]['delayed_departures'] += 1
+    for d in s.get('disruptions', []):
+        if d.get('airport') in airport_flow:
+            airport_flow[d['airport']]['disrupted'] = True
+    routes = {}
+    for f in s['flights']:
+        key = tuple(sorted((f['origin'], f['destination'])))
+        routes[key] = routes.get(key, 0) + 1
+    overnight_disruption = next((d for d in s.get('disruptions', []) if d.get('kind') == 'overnight'), None)
+    return {
+        'hub': HUB,
+        'model_version': s.get('model_version', MODEL_VERSION),
+        'airports': sorted(s['airports']),
+        'spokes': [a for a in s['airports'] if a != HUB],
+        'gates': {a: s['airports'][a]['gates'] for a in s['airports']},
+        'route_pairs': [{'airports': list(k), 'daily_legs': n} for k, n in sorted(routes.items())],
+        'airport_flow': airport_flow,
+        'overnight_hubs': {
+            hub: {
+                'tails': info['tails'],
+                'count': len(info['tails']),
+                'role': 'primary_overnight_hub' if hub == HUB else 'outstation_overnight_hub',
+                'deadlines': info['deadlines'],
+            } for hub, info in sorted(hubs.items())
+        },
+        'overnight_disruption': overnight_disruption,
+        'overnight_positions': overnight_pressure,
+        'connection_groups': len(s.get('connections', [])),
+        'flights': len(s['flights']),
+        'network_penalty_unit': 20000,
+        'scope': 'Synthetic overnight-hub network for four-pillar recovery; not a station plan',
+    }
 
 
 def generate(seed=42):
@@ -42,7 +105,9 @@ def generate(seed=42):
         {'id':'D3','kind':'crew_limit','resource':'C01','max_duty':650,'label':'Crew availability update · C01 has only 45m buffer beyond its original final release'},
         {'id':'D4','kind':'overnight','resource':'T01','deadline':1400,'label':'Overnight slot change · T01 must be at PIT by 23:20 to protect tomorrow’s first rotation'},
     ]
-    return {'model_version':MODEL_VERSION,'seed':seed,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),'airports':{a:{'x':p[0],'y':p[1],'gates':4 if a=='PIT' else 2} for a,p in AIRPORTS.items()}}
+    return {'model_version':MODEL_VERSION,'seed':seed,'hub':HUB,'flights':flights,'tails':tails,'crews':crews,'connections':connections,'disruptions':disruptions,'unstructured_signals':signals,'rules':dict(RULES),
+            'airports':{a:{'x':p[0],'y':p[1],'gates':4 if a==HUB else 2,'role':'hub' if a==HUB else 'spoke',
+                          'overnight_role':'primary' if a==HUB else ('spare_base' if a=='DTW' else 'spoke')} for a,p in AIRPORTS.items()}}
 
 
 def parse_signals(s,disrupted=True):
