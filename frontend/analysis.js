@@ -52,8 +52,8 @@
     const strip = $('analysisFocus');
     if (strip) {
       strip.textContent = window.analysisHighlights.length
-        ? `Focus · ${window.analysisHighlights.join(' · ')}`
-        : 'Focus · ask about an airport';
+        ? `Historical data mode · ${window.analysisHighlights.join(' · ')}`
+        : 'Historical data mode';
     }
   }
 
@@ -89,15 +89,15 @@
     try {
       const status = await fetch('/api/analysis/status', {headers: deskHeader()}).then(r => r.json());
       $('analysisStatus').textContent = status.available
-        ? `Pack ready · ${status.airports.join(', ')} · ${status.years[0]}–${status.years[1]}`
-        : 'Decade pack missing on server';
+        ? `Historical data mode · ${status.airports.join(', ')} · ${status.years[0]}–${status.years[1]}`
+        : 'Historical data pack unavailable on server';
       if (!status.live_available && $('analysisLive')) {
         $('analysisLive').disabled = true;
-        $('analysisLiveLabel').textContent = 'Live AI unavailable (set server credentials)';
+        $('analysisLiveLabel').textContent = 'Live AI unavailable';
       }
       const starters = await fetch('/api/analysis/starters', {headers: deskHeader()}).then(r => r.json());
       renderSuggestions(starters.prompts);
-      appendBubble('agent', 'Decade analyst', 'Ask about OTP, weather risk, storm days, COVID traffic, or map this scenario’s airports to the four pillars. Local answers use the bundled BTS/FAA/NOAA pack — no LLM required.', 'local · on demand');
+      appendBubble('agent', 'Airport performance', 'Ask about OTP, weather risk, storm days, COVID traffic, or map this scenario’s airports to the four pillars. Historical data mode uses the local pack — no LLM required.', 'local · on demand');
     } catch (error) {
       $('analysisStatus').textContent = error.message;
     }

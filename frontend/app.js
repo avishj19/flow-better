@@ -62,7 +62,7 @@ function render() {
   const option=state.current,m=option.metrics, scores=option.scores;
   const metrics=scores ? [
     ['Financial cost',money(scores.financial_cost),'delay + ferries + cancellations + reserve crew'],
-    ['Passenger impact',num(scores.passenger_impact),'passenger minutes + missed-connection points'],
+    ['Passenger impact',num(scores.passenger_impact),'model points · not passenger counts'],
     ['Network penalty',num(scores.network_health),'20,000 points per aircraft out of position at cutoff'],
     ['Crew buffer',`${scores.crew_buffer.minutes_remaining}m`,scores.crew_buffer.minutes_remaining<0?'Hard constraint failed · modeled duty':'Minimum remaining across operating crews']
   ] : [['Financial cost',money(m.cost),'Archived cost formula'],['Passenger delay',num(m.passenger_minutes),'Archived passenger minutes'],['Missed connections',m.missed_pax,'Archived result'],['Model version','1','Generate a new scenario to use four pillars']];

@@ -1,19 +1,61 @@
 import {content} from './content.js';
+
 const $ = s => document.querySelector(s);
-$('#hero-eyebrow').textContent=content.hero.eyebrow;
-$('#hero-title').textContent=content.hero.heading;
-$('#hero-description').textContent=content.hero.description;
-content.chapters.forEach((c,i)=>{const el=document.createElement('article');el.className='chapter'+(i===0?' active':'');el.id=`chapter-${i}`;const label=document.createElement('p');label.className='eyebrow';label.textContent=`${c.number} / ${c.label}`;const heading=document.createElement('h2');heading.textContent=c.heading;const p=document.createElement('p');p.textContent=c.description;el.append(label,heading,p);$('#chapters').append(el)});
-const money = n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(n);
-const number = n=>new Intl.NumberFormat('en-US').format(n);
-const tabs=$('#strategy-tabs');
-content.strategies.forEach((s,i)=>{const b=document.createElement('button');b.className='strategy-tab';b.id=`tab-${s.id}`;b.role='tab';b.setAttribute('aria-controls','strategy-detail');b.setAttribute('aria-selected',String(i===1));b.tabIndex=i===1?0:-1;b.innerHTML=`<span>${s.theme}</span><b>${s.name}</b>`;b.addEventListener('click',()=>select(i));b.addEventListener('keydown',e=>{let next;if(e.key==='ArrowRight')next=(i+1)%3;if(e.key==='ArrowLeft')next=(i+2)%3;if(e.key==='Home')next=0;if(e.key==='End')next=2;if(next!==undefined){e.preventDefault();select(next);tabs.children[next].focus()}});tabs.append(b)});
-function select(index){const s=content.strategies[index];[...tabs.children].forEach((t,i)=>{t.setAttribute('aria-selected',String(i===index));t.tabIndex=i===index?0:-1});const metrics=[['Financial cost',money(s.cost),'Modeled operating and recovery cost',s.cost/37000*100],['Passenger impact',number(s.passengers),'Points · lower is better',s.passengers/305015*100],['Network penalty',number(s.network),'Points · missed overnight positions',s.network/20000*100],['Crew buffer',`${s.crew>0?'+':''}${s.crew} min`,'Minimum remaining modeled duty time',Math.min(100,Math.abs(s.crew)/95*100)]];$('#strategy-detail').setAttribute('aria-labelledby',`tab-${s.id}`);$('#strategy-detail').innerHTML=`<div class="strategy-summary"><span class="status ${s.feasible?'':'blocked'}">${s.feasible?'FEASIBLE IN THE MODEL':'BLOCKED · CREW CONSTRAINT'}</span><h3>${s.delays}</h3><p>${s.detail}</p><ul>${s.actions.map(x=>`<li>${x}</li>`).join('')}</ul></div><div class="strategy-metrics">${metrics.map(([label,value,hint,width],i)=>`<div class="measure ${i===3&&s.crew<0?'negative':''}"><label>${label}</label><strong>${value}</strong><div class="meter" aria-hidden="true"><span style="width:${width}%"></span></div><small>${hint}</small></div>`).join('')}</div>`;}
+
+$('#hero-title').textContent = content.hero.heading;
+$('#hero-description').textContent = content.hero.description;
+
+const money = n => new Intl.NumberFormat('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0}).format(n);
+const number = n => new Intl.NumberFormat('en-US').format(n);
+const tabs = $('#strategy-tabs');
+
+content.strategies.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'strategy-tab';
+  b.id = `tab-${s.id}`;
+  b.role = 'tab';
+  b.setAttribute('aria-controls', 'strategy-detail');
+  b.setAttribute('aria-selected', String(i === 1));
+  b.tabIndex = i === 1 ? 0 : -1;
+  b.innerHTML = `<span>${s.theme}</span><b>${s.name}</b>`;
+  b.addEventListener('click', () => select(i));
+  b.addEventListener('keydown', e => {
+    let next;
+    if (e.key === 'ArrowRight') next = (i + 1) % 3;
+    if (e.key === 'ArrowLeft') next = (i + 2) % 3;
+    if (e.key === 'Home') next = 0;
+    if (e.key === 'End') next = 2;
+    if (next !== undefined) {
+      e.preventDefault();
+      select(next);
+      tabs.children[next].focus();
+    }
+  });
+  tabs.append(b);
+});
+
+function select(index) {
+  const s = content.strategies[index];
+  [...tabs.children].forEach((t, i) => {
+    t.setAttribute('aria-selected', String(i === index));
+    t.tabIndex = i === index ? 0 : -1;
+  });
+  const metrics = [
+    ['Financial cost', money(s.cost), 'Modeled operating and recovery cost', s.cost / 37000 * 100],
+    ['Passenger impact', number(s.passengers), 'Model points · lower is better', s.passengers / 305015 * 100],
+    ['Network penalty', number(s.network), 'Model points · missed overnight positions', s.network / 20000 * 100],
+    ['Crew buffer', `${s.crew > 0 ? '+' : ''}${s.crew} min`, 'Minimum remaining modeled duty time', Math.min(100, Math.abs(s.crew) / 95 * 100)]
+  ];
+  $('#strategy-detail').setAttribute('aria-labelledby', `tab-${s.id}`);
+  $('#strategy-detail').innerHTML = `<div class="strategy-summary"><span class="status ${s.feasible ? '' : 'blocked'}">${s.feasible ? 'FEASIBLE IN THE MODEL' : 'BLOCKED · CREW CONSTRAINT'}</span><h3>${s.delays}</h3><p>${s.detail}</p><ul>${s.actions.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="strategy-metrics">${metrics.map(([label, value, hint, width], i) => `<div class="measure ${i === 3 && s.crew < 0 ? 'negative' : ''}"><label>${label}</label><strong>${value}</strong><div class="meter" aria-hidden="true"><span style="width:${width}%"></span></div><small>${hint}</small></div>`).join('')}</div>`;
+}
+
 select(1);
-$('#scenario-toggle').addEventListener('click',()=>{const b=$('#scenario-toggle');const open=b.getAttribute('aria-expanded')==='true';b.setAttribute('aria-expanded',String(!open));$('#scenario-details').hidden=open;b.querySelector('span').textContent=open?'+':'−'});
-const reduced=matchMedia('(prefers-reduced-motion: reduce)');const story=$('#story');const stage=$('.story-stage');const chapters=[...document.querySelectorAll('.chapter')];const chapterButtons=[...document.querySelectorAll('[data-chapter]')];const signals=[...document.querySelectorAll('.signal')];let pending=false;
-function draw(){pending=false;const travel=Math.max(1,story.offsetHeight-stage.offsetHeight);const p=Math.max(0,Math.min(1,-story.getBoundingClientRect().top/travel));let chapter=p<.31?0:p<.65?1:2;if(reduced.matches)chapter=0;chapters.forEach((el,i)=>{el.classList.toggle('active',i===chapter);if(reduced.matches)el.removeAttribute('aria-hidden');else el.setAttribute('aria-hidden',String(i!==chapter))});chapterButtons.forEach((el,i)=>{el.classList.toggle('active',i===chapter);el.setAttribute('aria-current',i===chapter?'step':'false')});$('.story-count').textContent=`0${chapter+1} / 03`;$('.story-progress span').style.width=`${p*100}%`;signals.forEach((el,i)=>el.classList.toggle('visible',p>[.04,.34,.68][i]));if(!reduced.matches){let motion=p<.14?0:p<.31?(p-.14)/.17*.25:p<.65?.25+(p-.31)/.34*.55:p<.85?.8+(p-.65)/.2*.2:1;stage.style.setProperty('--story-scale',1.05+motion*.2);stage.style.setProperty('--story-x',`${-motion*4}%`);}}
-function schedule(){if(!pending){pending=true;requestAnimationFrame(draw)}}
-addEventListener('scroll',schedule,{passive:true});addEventListener('resize',schedule);reduced.addEventListener('change',schedule);
-chapterButtons.forEach((b,i)=>b.addEventListener('click',()=>{const travel=Math.max(1,story.offsetHeight-stage.offsetHeight);scrollTo({top:scrollY+story.getBoundingClientRect().top+travel*[.05,.4,.74][i],behavior:reduced.matches?'instant':'smooth'})}));draw();
-if(location.hostname==='localhost'||location.hostname==='127.0.0.1'){fetch('/api/status').then(r=>r.ok?r.json():null).then(data=>{if(data?.status==='ok')$('#local-desk').hidden=false}).catch(()=>{});}
+
+$('#scenario-toggle').addEventListener('click', () => {
+  const b = $('#scenario-toggle');
+  const open = b.getAttribute('aria-expanded') === 'true';
+  b.setAttribute('aria-expanded', String(!open));
+  $('#scenario-details').hidden = open;
+  b.querySelector('span').textContent = open ? '+' : '−';
+});

@@ -175,7 +175,7 @@ def approve(ident:str,body:Approval):
 def home():return FileResponse(ROOT/'dist/index.html')
 
 @app.get('/desk')
-def recovery_desk():return RedirectResponse('/#simulation',status_code=307)
+def recovery_desk():return RedirectResponse('/simulation',status_code=307)
 
 @app.get('/simulation')
 def embedded_simulator():return FileResponse(ROOT/'dist/simulation.html')
