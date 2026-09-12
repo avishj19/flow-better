@@ -41,3 +41,14 @@ button#disrupt,button#evaluate{font-weight:700}
 .option-list .placeholder{padding:18px;border:1px dashed #31465e;border-radius:6px;background:#0d1928}
 .advanced-settings>summary{color:#9ec3c0}
 .optional-data>summary{color:#9ec3c0}
+
+
+/* Desk fluid motion */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes desk-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .panel { animation: desk-rise .4s ease both; }
+  .metric { transition: opacity .25s ease, transform .25s ease; }
+  .metric:hover { transform: translateY(-2px); }
+  #message { transition: opacity .3s ease; }
+  .wx-card { transition: opacity .3s ease, transform .2s ease; }
+}

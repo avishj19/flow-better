@@ -46,8 +46,12 @@ function select(index) {
     ['Network penalty', number(s.network), 'Model points · missed overnight positions', s.network / 20000 * 100],
     ['Crew buffer', `${s.crew > 0 ? '+' : ''}${s.crew} min`, 'Minimum remaining modeled duty time', Math.min(100, Math.abs(s.crew) / 95 * 100)]
   ];
-  $('#strategy-detail').setAttribute('aria-labelledby', `tab-${s.id}`);
-  $('#strategy-detail').innerHTML = `<div class="strategy-summary"><span class="status ${s.feasible ? '' : 'blocked'}">${s.feasible ? 'FEASIBLE IN THE MODEL' : 'BLOCKED · CREW CONSTRAINT'}</span><h3>${s.delays}</h3><p>${s.detail}</p><ul>${s.actions.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="strategy-metrics">${metrics.map(([label, value, hint, width], i) => `<div class="measure ${i === 3 && s.crew < 0 ? 'negative' : ''}"><label>${label}</label><strong>${value}</strong><div class="meter" aria-hidden="true"><span style="width:${width}%"></span></div><small>${hint}</small></div>`).join('')}</div>`;
+  const panel = $('#strategy-detail');
+  panel.setAttribute('aria-labelledby', `tab-${s.id}`);
+  panel.style.animation = 'none';
+  void panel.offsetWidth;
+  panel.style.animation = '';
+  panel.innerHTML = `<div class="strategy-summary"><span class="status ${s.feasible ? '' : 'blocked'}">${s.feasible ? 'FEASIBLE IN THE MODEL' : 'BLOCKED · CREW CONSTRAINT'}</span><h3>${s.delays}</h3><p>${s.detail}</p><ul>${s.actions.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="strategy-metrics">${metrics.map(([label, value, hint, width], i) => `<div class="measure ${i === 3 && s.crew < 0 ? 'negative' : ''}"><label>${label}</label><strong>${value}</strong><div class="meter" aria-hidden="true"><span style="width:${width}%"></span></div><small>${hint}</small></div>`).join('')}</div>`;
 }
 
 select(1);
