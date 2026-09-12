@@ -28,7 +28,7 @@ export function RecoveryOptionCard({option, options, selected, onSelect, onAppro
   const rejected = !option.feasible || !option.isLegal;
   const scores = option.scores;
   return <article className={`option ${rejected ? 'failed' : ''} ${selected ? 'selected' : ''}`} aria-label={option.title}>
-    <div className="option-status"><span>{rejected ? 'REJECTED · HARD CONSTRAINT' : 'FEASIBLE · YOUR DECISION'}</span><span>{option.pareto_optimal ? 'TRADE-OFF' : ''}</span></div>
+    <div className="option-status"><span>{rejected ? 'REJECTED · HARD CONSTRAINT' : option.pareto_optimal ? 'FEASIBLE · YOUR DECISION' : 'FEASIBLE · DOMINATED'}</span><span>{option.pareto_optimal ? 'TRADE-OFF' : option.discovered ? 'SEARCH' : ''}</span></div>
     <h3>{option.title}</h3><p className="strategy">{option.description}</p>
     <PillarBar label="Financial cost" value={scores.financial_cost} values={options.map(o=>o.scores.financial_cost)} money />
     <PillarBar label="Passenger impact" value={scores.passenger_impact} values={options.map(o=>o.scores.passenger_impact)} unit="pts" />

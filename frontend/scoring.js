@@ -1,6 +1,10 @@
 // Presentation utilities only. Python is the authoritative scoring/legality engine.
 export const number = value => Number(value).toLocaleString('en-US');
-export const dollars = value => '$' + number(value);
+export const dollars = value => {
+  const amount = Number(value);
+  const options = Number.isInteger(amount) ? {maximumFractionDigits: 0} : {minimumFractionDigits: 2, maximumFractionDigits: 2};
+  return '$' + amount.toLocaleString('en-US', options);
+};
 export function impactLevel(value, values) {
   const min = Math.min(...values), max = Math.max(...values);
   if (min === max) return {label: value === 0 ? 'No penalty' : 'Equal', tone: value === 0 ? 'good' : 'neutral', width: value === 0 ? 0 : 50};

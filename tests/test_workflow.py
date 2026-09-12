@@ -20,7 +20,10 @@ def steps(text):
 def test_local():
     saved=[];r=w.run(generate(),1,persist=lambda x:saved.append(copy.deepcopy(x)))
     assert r['status']=='completed' and r['recommendation'] is None
-    assert r['feasible_plans']==['loyalty','operations'] and len(r['options'])==3
+    assert r['feasible_plans']==['loyalty','operations','holdback']
+    assert [o['plan'] for o in r['options']]==['cfo','loyalty','operations','holdback']
+    assert r['search']['surfaced']==['holdback'] and 'trim' in r['search']['dominated']
+    assert r['brief'] and 'no hidden score' in r['brief'].lower()
     assert 'No language model ran' in r['explanation'] and saved[-1]['status']=='completed'
 
 def test_live_scripted_aggregate_only_and_encrypted_context():

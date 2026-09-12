@@ -1,7 +1,11 @@
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = n => Number(n).toLocaleString('en-US');
-const money = n => '$' + num(n);
+const money = n => {
+  const amount = Number(n);
+  const options = Number.isInteger(amount) ? {maximumFractionDigits: 0} : {minimumFractionDigits: 2, maximumFractionDigits: 2};
+  return '$' + amount.toLocaleString('en-US', options);
+};
 const time = n => n == null ? '—' : `${n >= 1440 ? 'D+1 ' : ''}${String(Math.floor(n / 60) % 24).padStart(2,'0')}:${String(n % 60).padStart(2,'0')}`;
 let state = null, selected = null, exp = null, busy = false;
 let desk = localStorage.getItem('irop-desk') || 'default';
@@ -22,7 +26,7 @@ async function action(fn) {
 }
 function accept(result) {
   state=result; exp=state.experiments.at(-1);
-  selected=exp?.options.find(o=>o.plan===selected?.plan)||exp?.options.find(o=>o.feasible)||exp?.options[0]||null;
+  selected=exp?.options.find(o=>o.plan===selected?.plan)||exp?.options.find(o=>o.pareto_optimal)||exp?.options.find(o=>o.feasible)||exp?.options[0]||null;
   render();
 }
 function currentView() { return $('view').value==='preview'?selected:state[$('view').value]; }
@@ -47,21 +51,40 @@ function render() {
   $('evaluate').disabled=busy||!modern()||state.phase!=='disrupted';
   const d=state.disrupted;
   $('cascade').textContent=d?`Without recovery: ${d.metrics.delayed_flights} delayed flights · ${d.metrics.missed_pax} missed connecting passengers · ${d.evidence.filter(e=>e.hard!==false&&!e.passed).length} failed hard checks.`:'';
-  renderOptions();renderTimeline();renderEvents();window.refreshLiveControls?.();
+  renderDecision();renderBrief();renderOptions();renderTimeline();renderEvents();window.refreshLiveControls?.();
 }
-function selectPlan(plan) { selected=exp.options.find(o=>o.plan===plan);$('view').value='preview';renderOptions();renderTimeline(); }
+function selectPlan(plan) {
+  selected=exp.options.find(o=>o.plan===plan);$('view').value='preview';
+  if (selected) $('rotation').value='1';
+  renderOptions();renderTimeline();
+}
 async function approvePlan(plan) {
   await action(async()=>{
     $('view').value='current';accept(await api(`scenarios/${state.id}/approve`,{revision:state.revision,experiment_id:exp.id,plan,confirm:true}));
-    message('Approved in simulation. The chosen schedule, four scores and evidence are saved.');await loadHistory();
+    message('Approved in simulation. The desk brief and four scores are saved. Not a live airline action.');
+    $('decision').scrollIntoView({behavior:'smooth',block:'center'});
+    await loadHistory();
   });
+}
+function renderDecision() {
+  const box=$('decision');if (!box) return;
+  if (state.phase!=='recovered' || !state.current?.scores) {box.hidden=true;box.innerHTML='';return;}
+  const scores=state.current.scores;
+  box.hidden=false;
+  box.innerHTML=`<span class="eyebrow">LOCKED IN SIMULATION</span><h2>${esc(state.current.title)}</h2><p>${money(scores.financial_cost)} · passengers ${num(scores.passenger_impact)} · network ${num(scores.network_health)} · crew ${scores.crew_buffer.minutes_remaining}m</p><p class="muted">Human approval recorded for this sandbox. Not a live airline action or FAA finding.</p>`;
+}
+function renderBrief() {
+  const panel=$('brief'),text=$('briefText');if (!panel||!text) return;
+  if (!exp?.brief) {panel.hidden=true;text.textContent='';return;}
+  panel.hidden=false;
+  text.textContent=state.phase==='recovered'&&state.current?.title?exp.brief+'\n\nApproved in simulation: '+state.current.title+'. Lock is local to this sandbox.':exp.brief;
 }
 function renderOptions() {
   const current=!!(modern()&&state.phase==='disrupted'&&exp?.status==='completed'&&exp.revision===state.revision&&!busy);
   const options=modern()&&exp?.options.every(o=>o.scores)?exp.options:[];
-  const placeholder=!modern()?'Archived scenario: generate a new schedule to use the three recovery strategies.':state.phase==='baseline'?'Inject the four disruptions, then compare the three recovery strategies.':'Compare plans to calculate financial, passenger, network and crew outcomes.';
+  const placeholder=!modern()?'Archived scenario: generate a new schedule to use the four-pillar recovery strategies.':state.phase==='baseline'?'Inject the four disruptions, then compare named strategies and the bounded search.':'Compare plans to calculate financial, passenger, network and crew outcomes.';
   window.renderRecoveryCards?.({options,selectedPlan:selected?.plan,onSelect:selectPlan,onApprove:approvePlan,current,placeholder});
-  $('optionStatus').textContent=exp&&exp.revision!==state.revision ? (state.phase==='recovered'?'Decision saved. These are the evaluated options for the approved revision.':'Earlier-revision experiment: review only. Compare again before approval.') : exp?.status==='failed' ? 'Planner failed. No option from this experiment can be approved.' : 'Three independent impact measures, plus crew as a hard constraint. Relative bars include rejected candidates. No hidden weighted score.';
+  $('optionStatus').textContent=exp&&exp.revision!==state.revision ? (state.phase==='recovered'?'Decision saved. These are the evaluated options for the approved revision.':'Earlier-revision experiment: review only. Compare again before approval.') : exp?.status==='failed' ? 'Planner failed. No option from this experiment can be approved.' : 'Four independent pillars. Named strategies stay visible. A SEARCH card appears only when an extra action set is feasible and undominated. No hidden weighted score.';
   if(!options.length||!selected?.scores) { $('selection').innerHTML='';$('workflow').innerHTML='';return; }
   const failures=selected.evidence.filter(e=>e.hard!==false&&!e.passed);
   $('selection').innerHTML=`<div class="selection"><div class="section-head"><div><span class="eyebrow">SELECTED PLAN EVIDENCE</span><h3>${esc(selected.title)} <span class="pill">${selected.feasible?'PASSES MODELED CONSTRAINTS':'BLOCKED'}</span></h3><p>${esc(selected.rationale.rejection||'Inspect the schedule, overnight positions and exact check results before choosing a trade-off.')}</p></div></div><details ${failures.length?'open':''}><summary>Constraint evidence · ${failures.length} failed hard checks</summary><label><input id="allChecks" type="checkbox"> Show all checks and score evidence</label><div class="checks" id="checks"></div></details><details><summary>Overnight aircraft positions and crew buffers</summary><div class="checks"><table><thead><tr><th>Aircraft</th><th>At cutoff</th><th>Required hub</th><th>Cutoff</th><th>Penalty</th></tr></thead><tbody>${selected.details.overnight_positions.map(p=>`<tr><td>${p.tail}</td><td>${esc(p.position)}</td><td>${p.hub}</td><td>${time(p.deadline)}</td><td>${num(p.penalty)}</td></tr>`).join('')}</tbody></table><table><thead><tr><th>Crew</th><th>Report</th><th>Release</th><th>Deadline</th><th>Buffer</th></tr></thead><tbody>${selected.details.crew_buffers.map(c=>`<tr><td>${c.crew}</td><td>${time(c.report)}</td><td>${time(c.release)}</td><td>${time(c.deadline)}</td><td class="${c.minutes_remaining<0?'fail':'pass'}">${c.minutes_remaining}m</td></tr>`).join('')}</tbody></table></div></details></div>`;
@@ -89,8 +112,23 @@ async function loadHistory() {
   $('historyList').querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios/'+b.dataset.load));message(modern()?'Saved scenario loaded.':'Archived scenario loaded for review. Generate a new scenario to evaluate the new model.');}));
 }
 $('generate').onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios',{seed:Number($('seed').value)}));message('60-flight baseline validated. Inject four disruptions to start the recovery comparison.');await loadHistory();});
+$('demo').onclick=()=>action(async()=>{
+  $('seed').value='42';selected=null;
+  accept(await api('scenarios/demo',{seed:42}));
+  selected=exp?.options.find(o=>o.pareto_optimal)||exp?.options.find(o=>o.feasible)||selected;
+  $('view').value='preview';$('rotation').value='1';
+  message('Seed 42 demo ready. The cheap wait plan is illegal. Loyalty is dominated if Search appears. You still choose.');
+  $('options').scrollIntoView({behavior:'smooth',block:'start'});
+  await loadHistory();
+});
+$('copyBrief').onclick=()=>action(async()=>{
+  const text=$('briefText').textContent;if (!text) throw Error('Compare strategies to build a brief.');
+  if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+  else {const area=document.createElement('textarea');area.value=text;document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();}
+  message('Desk brief copied. Synthetic scores only.');
+});
 $('disrupt').onclick=()=>action(async()=>{accept(await api(`scenarios/${state.id}/disrupt`,{revision:state.revision}));message('Four disruptions applied. ORD’s ground-ops message now changes turnaround math.');await loadHistory();});
-$('evaluate').onclick=()=>action(async()=>{message($('live').checked?'OpenAI is requesting bounded simulations…':'Calculating three strategies across four pillars…');accept(await api(`scenarios/${state.id}/experiments`,{revision:state.revision,mode:$('live').checked?'live':'local',consent:$('consent').checked}));message(exp?.status==='failed'?'Workflow failed: '+exp.error:'Three strategies calculated. Inspect the math, compare the trade-offs, and choose a feasible plan.',exp?.status==='failed');await loadHistory();});
+$('evaluate').onclick=()=>action(async()=>{message($('live').checked?'OpenAI is requesting bounded simulations…':'Calculating named strategies and a bounded search…');accept(await api(`scenarios/${state.id}/experiments`,{revision:state.revision,mode:$('live').checked?'live':'local',consent:$('consent').checked}));if (selected) {$('view').value='preview';$('rotation').value='1';}message(exp?.status==='failed'?'Workflow failed: '+exp.error:'Strategies calculated. Search adds a card only when it finds an undominated extra. Inspect the math, then choose.',exp?.status==='failed');await loadHistory();});
 $('live').onchange=()=>{$('consentLabel').hidden=!$('live').checked;$('aiStatus').textContent=$('live').checked?'OpenAI planner · aggregate evidence only':'Deterministic planner · no LLM';};
 $('view').onchange=renderTimeline;$('rotation').onchange=renderTimeline;
 for(let i=1;i<=10;i++)$('rotation').insertAdjacentHTML('beforeend',`<option value="${i}">Rotation ${i}</option>`);

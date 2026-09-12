@@ -5,11 +5,22 @@ import re
 
 MODEL_VERSION = 2
 AIRPORTS = {'PIT': (290,180), 'BOS': (510,65), 'JFK': (480,170), 'DCA': (395,285), 'ORD': (90,95), 'DTW': (180,55)}
-PLANS = {
-    'cfo': ('The CFO Choice', 'Wait for maintenance and keep the original aircraft and crew.'),
-    'loyalty': ('The Loyalty Choice', 'Ferry a spare from DTW, use reserve crew, then ferry it home.'),
-    'operations': ('The Operations Choice', 'Cancel the final ORD round trip and keep the aircraft at PIT for tomorrow.'),
+NAMED_SPECS = {
+    'cfo': {'title':'The CFO Choice','description':'Wait for maintenance and keep the original aircraft and crew.','cancel_from_leg':None,'swap_from_leg':None,'ferries':()},
+    'loyalty': {'title':'The Loyalty Choice','description':'Ferry a spare from DTW, use reserve crew, then ferry it home.','cancel_from_leg':None,'swap_from_leg':4,'ferries':(('FERRY-1','DTW','PIT',1050),('FERRY-2','PIT','DTW',1330))},
+    'operations': {'title':'The Operations Choice','description':'Cancel the final ORD round trip and keep the aircraft at PIT for tomorrow.','cancel_from_leg':4,'swap_from_leg':None,'ferries':()},
 }
+SEARCH_SPECS = {
+    'holdback': {'title':'The Search Choice','description':'Bounded search: ferry the spare in, operate the bank, and skip the return ferry that still misses the overnight cutoff.','cancel_from_leg':None,'swap_from_leg':4,'ferries':(('FERRY-1','DTW','PIT',1050),)},
+    'trim': {'title':'Trim last inbound','description':'Bounded search: cancel only the last inbound to shrink modeled duty.','cancel_from_leg':5,'swap_from_leg':None,'ferries':()},
+}
+ALL_SPECS = {**NAMED_SPECS, **SEARCH_SPECS}
+PLANS = {k:(v['title'],v['description']) for k,v in NAMED_SPECS.items()}
+
+
+def spec(plan):
+    if plan not in ALL_SPECS:raise ValueError('Unknown recovery strategy')
+    return ALL_SPECS[plan]
 RULES = {'turn':30,'crew_turn':20,'duty':690,'segments':6,'flight_time':420,'rest':600,'connection':35,'gate_window':15}
 CREW_SCOPE = 'Simplified Part 117-inspired duty model; actual FAA legality is not evaluated.'
 FAA_SOURCE = 'https://www.faa.gov/about/office_org/headquarters_offices/agc/practice_areas/regulations/part117/part117_general'
@@ -77,13 +88,12 @@ def resources(s,disrupted):
 
 
 def assignments(s,plan):
-    fs=deepcopy(s['flights'])
+    action=spec(plan);fs=deepcopy(s['flights']);swap=action['swap_from_leg'];cancel=action['cancel_from_leg']
     for f in fs:
-        f['cancelled']=plan=='operations' and f['rotation']==1 and f['leg']>=4
-        if plan=='loyalty' and f['rotation']==1 and f['leg']>=4:f.update(tail='R01',crew='RC01')
-    if plan=='loyalty':
-        for ident,origin,dest,dep in [('FERRY-1','DTW','PIT',1050),('FERRY-2','PIT','DTW',1330)]:
-            fs.append({'id':ident,'rotation':1,'leg':-1,'origin':origin,'destination':dest,'dep':dep,'arr':dep+60,'tail':'R01','crew':'RC01','pax':0,'ferry':True,'cancelled':False})
+        f['cancelled']=cancel is not None and f['rotation']==1 and f['leg']>=cancel
+        if swap is not None and f['rotation']==1 and f['leg']>=swap and not f['cancelled']:f.update(tail='R01',crew='RC01')
+    for ident,origin,dest,dep in action['ferries']:
+        fs.append({'id':ident,'rotation':1,'leg':-1,'origin':origin,'destination':dest,'dep':dep,'arr':dep+60,'tail':'R01','crew':'RC01','pax':0,'ferry':True,'cancelled':False})
     return fs
 
 
@@ -93,7 +103,7 @@ def gate_ok(bookings,start,end,cap):
 
 def simulate(s,plan='cfo',disrupted=True):
     if s.get('model_version')!=MODEL_VERSION:raise ValueError('Archived model version: generate a new scenario for four-pillar recovery')
-    if plan not in PLANS:raise ValueError('Unknown recovery strategy')
+    if plan not in ALL_SPECS:raise ValueError('Unknown recovery strategy')
     rules=s['rules'];signals=parse_signals(s,disrupted);tails,crews=resources(s,disrupted)
     result=[];done={};gates={a:[] for a in s['airports']}
     for f in sorted(assignments(s,plan),key=lambda f:(f['dep'],f['id'])):
@@ -145,7 +155,8 @@ def simulate(s,plan='cfo',disrupted=True):
     feasible=all(e['passed'] for e in evidence if e.get('hard',True))
     crew_legal=all(e['passed'] for e in evidence if e['kind'].startswith('crew_') or e['kind']=='qualification')
     scores['crew_buffer']['isLegal']=crew_legal
-    o={'model_version':MODEL_VERSION,'plan':plan,'title':PLANS[plan][0],'description':PLANS[plan][1],'flights':result,'connections':connections,'evidence':evidence,'feasible':feasible,'isLegal':crew_legal,'scores':scores,'rank':None,'details':details,
+    action=spec(plan)
+    o={'model_version':MODEL_VERSION,'plan':plan,'title':action['title'],'description':action['description'],'discovered':plan in SEARCH_SPECS,'flights':result,'connections':connections,'evidence':evidence,'feasible':feasible,'isLegal':crew_legal,'scores':scores,'rank':None,'details':details,
        'metrics':{'delayed_flights':sum(f['delay']>0 and not f['ferry'] for f in result),'cancelled_flights':details['cancelled'],'delay_minutes':details['delay_minutes'],'passenger_minutes':details['passenger_minutes'],'missed_pax':details['missed_pax'],'cost':scores['financial_cost'],'cost_breakdown':details['cost_breakdown']}}
     o['rationale']=explain(o,signals)
     return o
@@ -224,7 +235,7 @@ def validate(s,flights,disrupted=True):
 
 def explain(option,signals):
     scores=option['scores'];details=option['details'];plan=option['plan']
-    objectives={'cfo':'Minimizes financial spend by waiting instead of purchasing positioning flights or reserve crew.','loyalty':'Prioritizes passenger continuity using a physically positioned spare and reserve crew.','operations':'Protects tomorrow’s aircraft position by cancelling the final ORD round trip; passengers incur an assumed overnight delay.'}
+    objectives={'cfo':'Minimizes financial spend by waiting instead of purchasing positioning flights or reserve crew.','loyalty':'Prioritizes passenger continuity using a physically positioned spare and reserve crew.','operations':'Protects tomorrow’s aircraft position by cancelling the final ORD round trip; passengers incur an assumed overnight delay.','holdback':'Bounded search dropped the return ferry after finding it late for the spare’s overnight cutoff; passenger continuity matches the named Loyalty play at lower cash.','trim':'Bounded search cancelled only the last inbound to reduce modeled duty; passengers still take an assumed overnight delay on that flight.'}
     kinds=['financial_score','passenger_score','network_health','crew_duty','signal_context']
     citations=[]
     for kind in kinds:
@@ -241,6 +252,13 @@ def scope_evidence(option):
     return option
 
 
+def _order(plan):
+    named=list(NAMED_SPECS);extra=list(SEARCH_SPECS)
+    if plan in named:return named.index(plan)
+    if plan in extra:return len(named)+extra.index(plan)
+    return 99
+
+
 def rank(options):
     """Pareto membership, not an arbitrary weighted sum or a forced winner."""
     keys=('financial_cost','passenger_impact','network_health')
@@ -248,4 +266,37 @@ def rank(options):
         o['rank']=None
         o['pareto_optimal']=o['feasible'] and not any(p['feasible'] and all(p['scores'][k]<=o['scores'][k] for k in keys) and any(p['scores'][k]<o['scores'][k] for k in keys) for p in options if p is not o)
         o['best_for']=[k for k in keys if o['scores'][k]==min(p['scores'][k] for p in options)]
-    return sorted(options,key=lambda o:list(PLANS).index(o['plan']))
+    return sorted(options,key=lambda o:_order(o['plan']))
+
+
+def discover(s,named):
+    """Evaluate extra action sets; surface only feasible undominated discoveries."""
+    extras=[scope_evidence(simulate(s,plan)) for plan in SEARCH_SPECS]
+    pool=list(named)+extras
+    keys=('financial_cost','passenger_impact','network_health')
+    def undominated(option):
+        return option['feasible'] and not any(p['feasible'] and all(p['scores'][k]<=option['scores'][k] for k in keys) and any(p['scores'][k]<option['scores'][k] for k in keys) for p in pool if p is not option)
+    surfaced=[o for o in extras if undominated(o)]
+    return list(named)+surfaced,{'evaluated':list(SEARCH_SPECS),'surfaced':[o['plan'] for o in surfaced],'dominated':[o['plan'] for o in extras if o['plan'] not in {x['plan'] for x in surfaced}]}
+
+
+def desk_brief(options,seed=42,approved=None):
+    """Plain-language desk note. No weighted winner."""
+    def line(o):
+        s=o['scores']
+        return f"{o['title']} — ${s['financial_cost']:,} · passengers {s['passenger_impact']:,} · network {s['network_health']:,} · crew {s['crew_buffer']['minutes_remaining']:+d}m"
+    rejected=[o for o in options if not o['feasible']]
+    pareto=[o for o in options if o.get('pareto_optimal')]
+    dominated=[o for o in options if o['feasible'] and not o.get('pareto_optimal')]
+    blocks=['PIT hub desk brief · seed '+str(seed)+' · synthetic model, not an airline quote or FAA finding','','REJECT']
+    blocks += ['- '+line(o)+'. '+((o.get('rationale') or {}).get('rejection') or 'Hard constraint failed') for o in rejected] or ['- None']
+    blocks += ['','FEASIBLE · Pareto · no hidden score']
+    blocks += ['- '+line(o)+'. '+o['description'] for o in pareto] or ['- None']
+    if dominated:
+        blocks += ['','FEASIBLE · dominated by another scored option']
+        blocks += ['- '+line(o)+'. Kept visible so the named strategy can be compared to the search result.' for o in dominated]
+    blocks += ['','Decision rule: discard illegal plans. Among Pareto options, pick the hub priority (passengers vs tomorrow’s metal). Do not average the pillars.']
+    if approved:
+        chosen=next((o for o in options if o['plan']==approved),None)
+        if chosen:blocks += ['','Approved in simulation: '+chosen['title']+'. Lock is local to this sandbox.']
+    return '\n'.join(blocks)

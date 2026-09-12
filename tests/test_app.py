@@ -28,8 +28,10 @@ def test_full_flow_persistence_stale_and_rejected(client):
 def test_desk_isolation_origin_and_validation(client):
     r=client.post('/api/scenarios',json={}).json()
     assert client.get('/api/scenarios/'+r['id'],headers={'X-IROP-Desk':'other'}).status_code==404
-    assert client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'}).status_code==400
-    assert client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'}).status_code==403
+    bad=client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'})
+    assert bad.status_code==400 and 'detail' in bad.json()
+    evil=client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'})
+    assert evil.status_code==403 and evil.json()['detail']=='Cross-origin writes forbidden'
     assert client.post('/api/scenarios',json={},headers={'Origin':'http://127.0.0.1:8010'}).status_code==200
     assert client.post('/api/scenarios',json={'seed':True}).status_code==422
 
@@ -50,6 +52,17 @@ def test_live_consent_and_phase(client):
     assert client.post(path+'/disrupt',json={'revision':1}).status_code==409
     assert client.post(path+'/experiments',json={'revision':1,'mode':'live','consent':False}).status_code==422
 
+
+def test_demo_endpoint_and_holdback_approval(client):
+    r=client.post('/api/scenarios/demo',json={'seed':42}).json()
+    assert r['phase']=='disrupted' and r['revision']==1
+    exp=r['experiments'][0]
+    assert [o['plan'] for o in exp['options']]==['cfo','loyalty','operations','holdback']
+    assert exp['search']['surfaced']==['holdback'] and 'no hidden score' in exp['brief'].lower()
+    hold=next(o for o in exp['options'] if o['plan']=='holdback')
+    assert hold['feasible'] and hold['discovered'] and hold['scores']['financial_cost']==23500
+    ok=client.post(f"/api/scenarios/{r['id']}/approve",json={'revision':1,'experiment_id':exp['id'],'plan':'holdback','confirm':True})
+    assert ok.status_code==200 and ok.json()['current']['plan']=='holdback' and ok.json()['phase']=='recovered'
 
 def test_archive_readonly(client):
     r=client.post('/api/scenarios',json={}).json();r['scenario'].pop('model_version');store.save_run(a.DATA,r)

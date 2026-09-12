@@ -24,9 +24,9 @@ lock=threading.RLock()
 async def guard(request:Request,call_next):
     origin=request.headers.get('origin')
     allowed=os.getenv('IROP_ORIGINS','http://127.0.0.1:8010,http://localhost:8010,http://127.0.0.1:8011,http://localhost:8011').split(',')
-    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return Response('Cross-origin writes forbidden',status_code=403)
+    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return Response(json.dumps({'detail':'Cross-origin writes forbidden'}),status_code=403,media_type='application/json')
     try:store.set_desk(request.headers.get('x-irop-desk'))
-    except ValueError as e:return Response(str(e),status_code=400)
+    except ValueError as e:return Response(json.dumps({'detail':str(e)}),status_code=400,media_type='application/json')
     r=await call_next(request);r.headers['X-Content-Type-Options']='nosniff';r.headers['X-IROP-Desk']=store.get_desk();return r
 
 class Strict(BaseModel):model_config=ConfigDict(extra='forbid')
@@ -48,13 +48,32 @@ def get(ident):
 def event(r,action,data):r['events'].append({'created':datetime.now(timezone.utc).isoformat(),'action':action,'data':data})
 def fresh(r,revision):
     if r['revision']!=revision:raise HTTPException(409,'Stale scenario revision. Reload before acting.')
-def digest(o):return hashlib.sha256(json.dumps({k:v for k,v in o.items() if k not in ('rank','digest','pareto_optimal','best_for')},sort_keys=True).encode()).hexdigest()
+def digest(o):return hashlib.sha256(json.dumps({k:v for k,v in o.items() if k not in ('rank','digest','pareto_optimal','best_for','discovered')},sort_keys=True).encode()).hexdigest()
 
 def current_model(r):
     if r['scenario'].get('model_version')!=MODEL_VERSION:raise HTTPException(409,'Archived model: generate a new scenario to use four-pillar recovery')
 
 @app.get('/api/status')
 def status():return dict(status='ok',model_version=MODEL_VERSION,desk=store.get_desk(),**workflow.config())
+@app.post('/api/scenarios/demo')
+def demo(body:Scenario):
+    """One-click seed path: generate, disrupt, and compare. Same locks as the stepped API."""
+    with lock:
+        s=generate(body.seed);baseline=simulate(s,disrupted=False)
+        if not baseline['feasible']:raise HTTPException(422,'Generated baseline failed validation')
+        r={'id':uuid.uuid4().hex,'name':f'PIT hub · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'revision':1,'phase':'disrupted','scenario':s,'baseline':baseline,'disrupted':None,'current':None,'experiments':[],'events':[]}
+        event(r,'scenario_generated',{'seed':body.seed,'flights':len(s['flights']),'path':'demo'})
+        r['disrupted']=simulate(r['scenario']);r['current']=r['disrupted']
+        event(r,'disruptions_injected',{'disruptions':r['scenario']['disruptions'],'result':r['disrupted']['metrics']})
+        def persist(report):
+            existing=next((i for i,x in enumerate(r['experiments']) if x['id']==report['id']),None)
+            if existing is None:r['experiments'].append(copy.deepcopy(report))
+            else:r['experiments'][existing]=copy.deepcopy(report)
+            store.save_run(DATA,r)
+        try:report=workflow.run(r['scenario'],r['revision'],'local',False,persist=persist)
+        except ValueError as e:raise HTTPException(422,str(e))
+        for o in report['options']:o['digest']=digest({k:v for k,v in o.items() if k not in ('rank','digest')})
+        persist(report);event(r,'experiment_finished',{'id':report['id'],'status':report['status'],'rejected':[o['plan'] for o in report['options'] if not o['feasible']],'search':report.get('search')});store.save_run(DATA,r);return r
 @app.get('/api/scenarios')
 def history():return store.list_run_summaries(DATA)
 @app.get('/api/scenarios/{ident}')

@@ -1,6 +1,6 @@
 from copy import deepcopy
 import pytest
-from backend.simulator import generate,simulate,validate,rank,PLANS,parse_signals,calculate_recovery_scores,scope_evidence
+from backend.simulator import generate,simulate,validate,rank,PLANS,parse_signals,calculate_recovery_scores,scope_evidence,discover,desk_brief
 
 @pytest.mark.parametrize('seed',[0,1,7,42,111,999999])
 def test_reproducible_valid_baseline(seed):
@@ -87,6 +87,19 @@ def test_turn_signal_independently_verified():
     s=generate();fs=simulate(s,'cfo')['flights'];last=next(f for f in fs if f['id']=='RX105');prior=next(f for f in fs if f['id']=='RX104')
     last['actual_dep']=prior['actual_arr']+30
     assert any(e['kind']=='aircraft_time' and not e['passed'] for e in validate(s,fs))
+
+def test_bounded_search_surfaces_holdback():
+    s=generate();named=[simulate(s,p) for p in PLANS]
+    options,note=discover(s,named);ranked=rank(options)
+    by={o['plan']:o for o in ranked}
+    assert note['surfaced']==['holdback'] and 'trim' in note['dominated']
+    assert by['holdback']['feasible'] and by['holdback']['discovered'] and by['holdback']['pareto_optimal']
+    assert by['loyalty']['feasible'] and not by['loyalty']['pareto_optimal']
+    assert by['operations']['pareto_optimal'] and not by['cfo']['feasible']
+    assert by['holdback']['scores']['financial_cost']==23500
+    assert by['holdback']['scores']['passenger_impact']==by['loyalty']['scores']['passenger_impact']
+    assert 'Search Choice' in desk_brief(ranked,42) and 'dominated' in desk_brief(ranked,42).lower()
+    assert desk_brief(ranked,42,'holdback').count('Approved in simulation')==1
 
 def test_evidence_scope_and_no_mutation():
     s=generate();before=deepcopy(s);o=scope_evidence(simulate(s,'operations'))
