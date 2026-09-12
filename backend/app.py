@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
@@ -24,9 +24,10 @@ lock=threading.RLock()
 async def guard(request:Request,call_next):
     origin=request.headers.get('origin')
     allowed=os.getenv('IROP_ORIGINS','http://127.0.0.1:8010,http://localhost:8010').split(',')
-    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return Response('Cross-origin writes forbidden',status_code=403)
+    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:
+        return JSONResponse({'detail':'Cross-origin writes forbidden'},status_code=403)
     try:store.set_desk(request.headers.get('x-irop-desk'))
-    except ValueError as e:return Response(str(e),status_code=400)
+    except ValueError as e:return JSONResponse({'detail':str(e)},status_code=400)
     r=await call_next(request);r.headers['X-Content-Type-Options']='nosniff';r.headers['X-IROP-Desk']=store.get_desk();return r
 
 class Strict(BaseModel):model_config=ConfigDict(extra='forbid')

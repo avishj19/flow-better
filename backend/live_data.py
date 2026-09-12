@@ -3,7 +3,6 @@ import json
 import math
 import os
 import uuid
-from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 import httpx
