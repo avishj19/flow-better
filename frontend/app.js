@@ -112,15 +112,16 @@ async function loadHistory() {
   $('historyList').querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios/'+b.dataset.load));message(modern()?'Saved scenario loaded.':'Archived scenario loaded for review. Generate a new scenario to evaluate the new model.');}));
 }
 $('generate').onclick=()=>action(async()=>{selected=null;$('view').value='current';accept(await api('scenarios',{seed:Number($('seed').value)}));message('60-flight baseline validated. Inject four disruptions to start the recovery comparison.');await loadHistory();});
-$('demo').onclick=()=>action(async()=>{
+async function playDemo(){
   $('seed').value='42';selected=null;
   accept(await api('scenarios/demo',{seed:42}));
-  selected=exp?.options.find(o=>o.pareto_optimal)||exp?.options.find(o=>o.feasible)||selected;
+  selected=exp?.options.find(o=>o.plan==='holdback')||exp?.options.find(o=>o.pareto_optimal)||exp?.options.find(o=>o.feasible)||selected;
   $('view').value='preview';$('rotation').value='1';
-  message('Seed 42 demo ready. The cheap wait plan is illegal. Loyalty is dominated if Search appears. You still choose.');
+  message('Seed 42 demo ready. Search is $23,500 for the same passengers as Loyalty. Operations protects tomorrow. You still choose.');
   $('options').scrollIntoView({behavior:'smooth',block:'start'});
   await loadHistory();
-});
+}
+$('demo').addEventListener('click',()=>action(playDemo));
 $('copyBrief').onclick=()=>action(async()=>{
   const text=$('briefText').textContent;if (!text) throw Error('Compare strategies to build a brief.');
   if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
