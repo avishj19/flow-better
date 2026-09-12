@@ -6,9 +6,21 @@ import re
 MODEL_VERSION = 2
 AIRPORTS = {'PIT': (290,180), 'BOS': (510,65), 'JFK': (480,170), 'DCA': (395,285), 'ORD': (90,95), 'DTW': (180,55)}
 PLANS = {
-    'cfo': ('The CFO Choice', 'Wait for maintenance and keep the original aircraft and crew.'),
-    'loyalty': ('The Loyalty Choice', 'Ferry a spare from DTW, use reserve crew, then ferry it home.'),
-    'operations': ('The Operations Choice', 'Cancel the final ORD round trip and keep the aircraft at PIT for tomorrow.'),
+    'cfo': (
+        'The CFO Choice',
+        'Wait for maintenance and keep the original aircraft and crew. '
+        'Lowest cash outlay on paper (no ferry, no reserve crew), but the cascade usually blows the crew-duty buffer, so the desk cannot approve it when legality fails.',
+    ),
+    'loyalty': (
+        'The Loyalty Choice',
+        'Ferry a spare from DTW, staff it with reserve crew, finish the bank, then ferry the spare home. '
+        'You pay for two positioning legs and a reserve crew to protect today’s passengers and connections; overnight network position can still take a soft penalty.',
+    ),
+    'operations': (
+        'The Operations Choice',
+        'Cancel the final ORD round trip and keep the aircraft overnight at PIT for tomorrow’s first bank. '
+        'Best for next-day network readiness at the same modeled cash cost as Loyalty, but passengers on the cancelled pair absorb a large assumed overnight delay and missed connections.',
+    ),
 }
 RULES = {'turn':30,'crew_turn':20,'duty':690,'segments':6,'flight_time':420,'rest':600,'connection':35,'gate_window':15}
 CREW_SCOPE = 'Simplified Part 117-inspired duty model; actual FAA legality is not evaluated.'
@@ -224,7 +236,11 @@ def validate(s,flights,disrupted=True):
 
 def explain(option,signals):
     scores=option['scores'];details=option['details'];plan=option['plan']
-    objectives={'cfo':'Minimizes financial spend by waiting instead of purchasing positioning flights or reserve crew.','loyalty':'Prioritizes passenger continuity using a physically positioned spare and reserve crew.','operations':'Protects tomorrow’s aircraft position by cancelling the final ORD round trip; passengers incur an assumed overnight delay.'}
+    objectives={
+        'cfo':'Airport-desk read: cheapest cash path by waiting, but reject if crew buffer goes negative—money saved is useless when the plan is illegal.',
+        'loyalty':'Airport-desk read: spend on ferry + reserve crew to keep passengers moving today; accept a softer overnight-position hit if the hub’s passenger product matters more.',
+        'operations':'Airport-desk read: sacrifice today’s ORD bank to park metal at PIT for tomorrow; choose this when next-day network health outranks passenger impact.',
+    }
     kinds=['financial_score','passenger_score','network_health','crew_duty','signal_context']
     citations=[]
     for kind in kinds:
