@@ -8,10 +8,21 @@ let desk = localStorage.getItem('irop-desk') || 'default';
 $('desk').value = desk;
 const modern = () => state?.scenario.model_version === 2;
 async function api(path, body) {
-  const response = await fetch('/api/' + path, {method: body === undefined ? 'GET' : 'POST', headers: {'Content-Type':'application/json','X-IROP-Desk':desk}, body: body === undefined ? undefined : JSON.stringify(body)});
+  const headers = {'Content-Type':'application/json','X-IROP-Desk':desk};
+  const token = await window.flowbetterAuth?.getAccessToken?.();
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const response = await fetch('/api/' + path, {method: body === undefined ? 'GET' : 'POST', headers, body: body === undefined ? undefined : JSON.stringify(body)});
   const result = await response.json().catch(() => ({detail:'Request rejected'}));
+  if (response.status === 401 && window.flowbetterAuth?.enabled && !token) throw Error('Sign in to use this recovery desk.');
   if (!response.ok) throw Error(typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail));
   return result;
+}
+function authReady() {
+  if (window.flowbetterAuth?.ready) return Promise.resolve();
+  return new Promise(resolve => {
+    window.addEventListener('flowbetter-auth-ready', resolve, {once:true});
+    setTimeout(resolve, 4000);
+  });
 }
 function message(text,error=false) { $('message').textContent=text; $('message').className=error?'error':''; }
 async function action(fn) {
@@ -68,12 +79,21 @@ function render() {
 function selectPlan(plan) { selected=exp.options.find(o=>o.plan===plan);$('view').value='preview';renderOptions();renderTimeline(); }
 async function approvePlan(plan) {
   await action(async()=>{
-    $('view').value='current';accept(await api(`scenarios/${state.id}/approve`,{revision:state.revision,experiment_id:exp.id,plan,confirm:true}));
-    message('Approved in simulation. The chosen schedule, four scores and evidence are saved.');await loadHistory();
+    try {
+      $('view').value='current';accept(await api(`scenarios/${state.id}/approve`,{revision:state.revision,experiment_id:exp.id,plan,confirm:true}));
+      message('Approved in simulation. The chosen schedule, four scores and evidence are saved.');await loadHistory();
+    } catch (error) {
+      if (window.flowbetterAuth?.enabled && /insufficient_scope|approve:recovery/.test(error.message)) {
+        message('Approval needs a fresh MFA confirmation. Confirm identity, then approve again.');
+        await window.flowbetterAuth.stepUp();
+        return;
+      }
+      throw error;
+    }
   });
 }
 function renderOptions() {
-  const current=!!(modern()&&state.phase==='disrupted'&&exp?.status==='completed'&&exp.revision===state.revision&&!busy);
+  const current=!!(modern()&&state.phase==='disrupted'&&exp?.status==='completed'&&exp.revision===state.revision&&!busy&&(typeof window.flowbetterAuth?.can!=='function'||window.flowbetterAuth.can('approve:recovery')));
   const options=modern()&&exp?.options.every(o=>o.scores)?exp.options:[];
   const placeholder=!modern()?'Archived scenario: generate a new schedule to use the three recovery strategies.':state.phase==='baseline'?'Inject the four disruptions, then compare the three recovery strategies.':'Compare plans to calculate financial, passenger, network and crew outcomes.';
   window.renderRecoveryCards?.({options,selectedPlan:selected?.plan,onSelect:selectPlan,onApprove:approvePlan,current,placeholder});
@@ -120,4 +140,13 @@ for(let i=1;i<=10;i++)$('rotation').insertAdjacentHTML('beforeend',`<option valu
 $('refresh').onclick=()=>action(loadHistory);
 $('switchDesk').onclick=()=>action(async()=>{const next=$('desk').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(next))throw Error('Use a valid desk ID.');desk=next;localStorage.setItem('irop-desk',desk);state=null;window.state=null;selected=null;exp=null;$('scenario').hidden=true;$('empty').hidden=false;$('events').innerHTML='';await loadHistory();await window.reloadObservations?.();message('Switched to desk '+desk);});
 window.addEventListener('recovery-cards-ready',()=>{if(state)renderOptions();});
-(async()=>{try{const status=await api('status');if(!status.live_available){$('live').disabled=true;$('aiStatus').textContent='Deterministic planner · live AI requires server credentials';}await loadHistory();}catch(error){message(error.message,true);}})();
+(async()=>{
+  await authReady();
+  if (window.flowbetterAuth?.enabled && !window.flowbetterAuth.user) {
+    message('Sign in with Auth0 to generate, compare, or approve a recovery plan.');
+    $('generate').disabled=true;
+    return;
+  }
+  if (window.flowbetterAuth?.desk) { desk=window.flowbetterAuth.desk; $('desk').value=desk; }
+  try{const status=await api('status');if(!status.live_available){$('live').disabled=true;$('aiStatus').textContent='Deterministic planner · live AI requires server credentials';}await loadHistory();}catch(error){message(error.message,true);}
+})();

@@ -86,7 +86,22 @@ State moves baseline → disrupted → recovered. Approval requires a current co
 
 All schedules are synthetic, use one shared notional clock and assume 60-minute flights. Aircraft turns are normally 30 minutes, crew transfers 20 minutes, connection transfers 35 minutes. Gate occupancy is modeled around arrivals/departures. Tomorrow's network impact is an overnight-position proxy, not a simulated next-day network. The three fixed strategies are not a global optimization search.
 
-SQLite history and desk IDs provide organization, not authentication. This is a single-user loopback prototype. No real airline actions are exposed.
+SQLite history and desk IDs provide organization, not authentication, until Auth0 is configured. This remains a simulation: no real airline actions are exposed.
+
+## Optional Auth0 desk security
+
+When `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` and `AUTH0_CLIENT_ID` are set, the recovery desk stops trusting the `X-IROP-Desk` header. Operators sign in with Auth0 Universal Login (SPA + PKCE). Access tokens are validated on the FastAPI API with `auth0-fastapi-api`. The workspace is taken from the token: Auth0 Organization slug, the namespaced `https://flowbetter.app/desk` claim, or a per-user `u-` workspace.
+
+| Permission | Who | What it unlocks |
+|---|---|---|
+| `read:scenarios` | Viewer | History, timeline, evidence |
+| `write:scenarios` | Analyst | Generate, disrupt, compare, project weather |
+| `fetch:observations` | Analyst | NOAA / FR24 snapshot fetch (FR24 token stays server-side) |
+| `approve:recovery` | Approver | The only path that locks a simulation decision |
+
+Approvals record the Auth0 `sub` and organization on the event. If an analyst tries to approve, the API returns `insufficient_scope` and the UI can send them through MFA step-up (`acr_values` + `max_age=0`). Configure a post-login Action so `approve:recovery` is only added after MFA. Enable RBAC and **Add Permissions in the Access Token** on the Auth0 API.
+
+Create an Auth0 **API** with identifier `https://flowbetter.local/api` and a **Single Page Application** (no client secret) whose callback, logout, and web origins match this origin (`http://127.0.0.1:8011`). Organizations map one airline/airport OCC to one isolated SQLite desk. Local demo without those env vars stays open on loopback.
 
 ## Optional OpenAI planner
 
@@ -98,7 +113,7 @@ No actual OpenAI provider run was performed for this refactor; scripted integrat
 
 ## Verification
 
-55 backend tests and three JavaScript utility tests pass. Coverage includes formula arithmetic, text-to-delay counterfactuals, all three trade-offs, cancellation/ferry continuity, modeled hard constraints, stale/concurrent approvals, legacy scenario guards, planner bounds/citations and live-data adapter failures. Backend tests report two upstream Starlette/AnyIO warnings. The Python suite used the existing local Python environment; a fresh dependency installation has not been separately exercised.
+Backend tests and three JavaScript utility tests cover the four-pillar model plus optional Auth0 desk isolation. Coverage includes formula arithmetic, text-to-delay counterfactuals, all three trade-offs, cancellation/ferry continuity, modeled hard constraints, stale/concurrent approvals, legacy scenario guards, planner bounds/citations and live-data adapter failures. Backend tests report two upstream Starlette/AnyIO warnings. The Python suite used the existing local Python environment; a fresh dependency installation has not been separately exercised.
 
 The app originated as an isolated TradeOps adaptation; the original TradeOps project remains unchanged. Local `legacy/`, runtime data, credentials, build dependencies and working files are ignored by Git.
 

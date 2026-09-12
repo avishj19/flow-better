@@ -8,11 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
-from . import store, agent_workflow as workflow, live_data, virtual_agent, analysis_agent
+from . import store, agent_workflow as workflow, live_data, virtual_agent, analysis_agent, auth
 from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION, network_snapshot
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
@@ -25,8 +25,18 @@ async def guard(request:Request,call_next):
     origin=request.headers.get('origin')
     allowed=os.getenv('IROP_ORIGINS','http://127.0.0.1:8010,http://localhost:8010,http://127.0.0.1:8011,http://localhost:8011').split(',')
     if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:return Response('Cross-origin writes forbidden',status_code=403)
-    try:store.set_desk(request.headers.get('x-irop-desk'))
-    except ValueError as e:return Response(str(e),status_code=400)
+    auth.set_claims(None)
+    try:
+        if auth.enabled() and not auth.is_public(request.url.path) and request.method!='OPTIONS':
+            claims=await auth.authenticate(request)
+            auth.set_claims(claims)
+            store.set_desk(auth.desk_for(claims))
+        else:
+            store.set_desk(request.headers.get('x-irop-desk') if not auth.enabled() else 'default')
+    except auth.AuthError as e:
+        return auth.error_response(e)
+    except ValueError as e:
+        return JSONResponse({'detail':str(e)},status_code=400)
     r=await call_next(request);r.headers['X-Content-Type-Options']='nosniff';r.headers['X-IROP-Desk']=store.get_desk();return r
 
 class Strict(BaseModel):model_config=ConfigDict(extra='forbid')
@@ -54,7 +64,7 @@ def get(ident):
     if not r:raise HTTPException(404,'Scenario not found in this desk')
     return r
 
-def event(r,action,data):r['events'].append({'created':datetime.now(timezone.utc).isoformat(),'action':action,'data':data})
+def event(r,action,data):r['events'].append({'created':datetime.now(timezone.utc).isoformat(),'action':action,'data':auth.attach_actor(data)})
 def fresh(r,revision):
     if r['revision']!=revision:raise HTTPException(409,'Stale scenario revision. Reload before acting.')
 def digest(o):return hashlib.sha256(json.dumps({k:v for k,v in o.items() if k not in ('rank','digest','pareto_optimal','best_for')},sort_keys=True).encode()).hexdigest()
@@ -63,7 +73,19 @@ def current_model(r):
     if r['scenario'].get('model_version')!=MODEL_VERSION:raise HTTPException(409,'Archived model: generate a new scenario to use four-pillar recovery')
 
 @app.get('/api/status')
-def status():return dict(status='ok',model_version=MODEL_VERSION,desk=store.get_desk(),virtual_agent=True,analysis=analysis_agent.config(),**workflow.config())
+def status():
+    payload=dict(status='ok',model_version=MODEL_VERSION,virtual_agent=True,analysis=analysis_agent.config(),**workflow.config(),auth=auth.public_config())
+    if auth.enabled():payload['desk']=auth.actor() and store.get_desk()
+    else:payload['desk']=store.get_desk()
+    return payload
+@app.get('/api/auth/config')
+def auth_config():return auth.public_config()
+@app.get('/api/auth/me')
+def auth_me():
+    claims=auth.current_claims()
+    if not auth.enabled():return {'enabled':False,'authenticated':False}
+    if not claims:raise HTTPException(401,{'error':'invalid_request','error_description':'Authentication required'})
+    return {'enabled':True,'authenticated':True,'identity':auth.public_identity(claims),'permissions':sorted(auth.permissions(claims)),'desk':store.get_desk()}
 @app.get('/api/agent/starters')
 def agent_starters():return {'prompts':virtual_agent.starter_prompts(),'scope':'Local desk agent · network + overnight hub briefings'}
 @app.get('/api/analysis/status')
