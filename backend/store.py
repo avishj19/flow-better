@@ -6,7 +6,7 @@ so existing workspaces keep working. Additional desks live under DATA/desks/<id>
 Hardening vs the stress findings:
 - busy_timeout + WAL so concurrent writers retry instead of failing immediately
 - per-path write lock inside one process (API threads)
-- lean summary column so /api/runs does not hydrate every full payload
+- lean summary column so /api/scenarios does not hydrate every full payload
 """
 from __future__ import annotations
 
