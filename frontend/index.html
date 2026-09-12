@@ -1,14 +1,111 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FlowBetter · Recovery desk</title><link rel="stylesheet" href="/static/style.css"></head><body>
-<aside><a class="brand" href="/">✳ <span>FlowBetter<small>RECOVERY SANDBOX</small></span></a><div class="workspace"><span class="dot"></span> Local simulation <span class="pill">DEMO</span></div><nav><a class="active" href="#overview">◈ &nbsp; Recovery desk</a><a href="#options">⇄ &nbsp; Recovery options</a><a href="#timeline">▥ &nbsp; Flight timeline</a><a href="#history">↺ &nbsp; Scenario history</a></nav><div class="side-note"><span class="eyebrow">THE HUMAN STAYS IN CONTROL</span><p>Explore the tradeoffs.<br>Verify the constraints.<br>Approve a simulation.</p><small>Synthetic data. Simplified rules.<br>No live airline actions.</small></div><label class="desk-label">Desk workspace<input id="desk" value="default" maxlength="64" aria-label="Desk workspace"></label><button id="switchDesk" class="quiet">Switch desk →</button></aside>
-<main id="overview"><header><div><span class="eyebrow">OPERATIONS / RECOVERY DESK</span><h1>Compare recovery decisions. See every trade-off.</h1><p>Financial cost. Passenger impact. Tomorrow’s network. Crew limits. One transparent decision.</p></div><span class="system"><i></i> Simulator ready</span></header>
-<div class="intro"><div><span class="eyebrow">01 / BUILD THE DAY</span><h2>1. Generate the flight schedule</h2><p>Generate a 60-flight day, inject four connected operational disruptions, then compare CFO, Loyalty and Operations strategies.</p></div><div class="controls"><label>Scenario seed<input id="seed" type="number" min="0" max="999999" value="42"></label><button id="generate">Generate schedule <span>↗</span></button></div></div>
-<div id="message" role="status" aria-live="polite"></div>
-<section id="empty"><h2>Your recovery desk is ready.</h2><p>Generate a schedule to inspect aircraft rotations, passenger connections, and the recovery decisions ahead.</p><div class="steps"><span>1 &nbsp; Generate a reproducible day</span><span>2 &nbsp; Inject disruption & compare</span><span>3 &nbsp; Review evidence & approve</span></div></section>
-<div id="scenario" hidden><div class="scenario-top"><div><span id="scenarioName"></span><span id="phase" class="pill"></span></div><span id="revision"></span></div>
-<div class="metrics" id="metrics"></div>
-<div class="two-col"><section class="panel network"><div class="section-head"><div><span class="eyebrow">THE NETWORK</span><h2>Flight network & overnight hubs</h2></div><span class="pill">6 AIRPORTS</span></div><svg id="network" viewBox="0 0 600 340" role="img" aria-label="Schematic network centered on Pittsburgh"></svg><div class="map-key"><span><i class="green"></i> Hub network</span><span><i class="orange"></i> Airport disruption applied</span><span>Schematic · not geographic scale</span></div></section>
-<section class="panel"><span class="eyebrow">02 / STRESS THE NETWORK</span><h2>2. Apply four disruptions</h2><p class="muted">Aircraft and crew availability ripple into later flights and passenger connections.</p><div id="disruptions"></div><div id="signals"></div><button id="disrupt" class="full">Inject four disruptions →</button><div id="cascade"></div></section></div>
-<section id="options" class="panel"><div class="section-head"><div><span class="eyebrow">03 / FIND A WAY FORWARD</span><h2>3. Compare recovery strategies</h2><p class="muted">Separate scores show the trade-offs. Crew feasibility is mandatory; the final choice is yours.</p></div><button id="evaluate">Compare three recovery strategies →</button></div><div class="mode"><label><input type="checkbox" id="live"> Use OpenAI tool planner</label><span id="aiStatus">Local fixed plan · no LLM</span><label id="consentLabel" hidden><input type="checkbox" id="consent"> I consent to sending aggregate metrics and evidence IDs to OpenAI; API charges may apply.</label></div><p id="optionStatus" class="muted"></p><div id="optionList" class="option-list"><p class="placeholder">Inject disruptions to unlock recovery experiments.</p></div><div id="selection"></div><details class="assumptions"><summary>Four-pillar formulas &amp; modeling assumptions</summary><p><b>Financial:</b> $100 × operated flight-delay minutes + $10,000 × ferry flights + $15,000 × cancelled flights + $3,000 × reserve crews.</p><p><b>Passengers:</b> Σ(booked passengers × delay minutes) + 250 × missed connecting passengers. Cancellation assumes 1,440 minutes of delay per booked passenger; no real rebooking is claimed.</p><p><b>Network:</b> 20,000 points per aircraft not at its planned overnight hub by its cutoff. Lower is better. This is a soft next-day readiness penalty.</p><p><b>Crew buffer:</b> minimum remaining minutes across operating crews = report + modeled duty allowance − actual final release. Negative buffer blocks approval, as do other hard constraints. Simplified Part 117-inspired checks include qualification, rest, segments and flight time; actual FAA legality is not evaluated.</p><p><b>ORD context:</b> a bounded parser extracts “add 45 mins” from the preserved synthetic ground-ops message. For affected arrivals, aircraft turnaround becomes 30 + 45 = 75 minutes, which propagates into flight timing and all four scores. Gate service windows remain a separate simplification.</p><p>No combined weighted score and no claim that competitors lack explainability. Local rationale is generated from verified math; optional AI prose cannot override it.</p></details><div id="workflow"></div></section>
-<section id="timeline" class="panel"><div class="section-head"><div><span class="eyebrow">FOLLOW THE CASCADE</span><h2>Flight timeline</h2><p class="muted">Each row is one flight. Pale bars show the original schedule; colored bars show the selected state.</p></div><div><label>View <select id="view"><option value="current">Current state</option><option value="disrupted">Disrupted</option><option value="baseline">Baseline</option><option value="preview">Selected plan preview</option></select></label><label>Rotation <select id="rotation"><option value="all">All 10 rotations</option></select></label></div></div><div id="flightTable"></div></section>
-<section id="connections" class="panel"><div class="section-head"><div><span class="eyebrow">THE PASSENGER VIEW</span><h2>Connections at risk</h2></div><span class="pill">35 MIN TRANSFER</span></div><div id="connectionTable"></div></section></div>
-<details class="optional-data"><summary>Optional live airport data · NOAA weather and Flightradar24</summary><section class="panel" id="livePanel"><div class="section-head"><div><span class="eyebrow">OPTIONAL DATA SOURCES</span><h2>Optional live airport data</h2><p class="muted">Fetch a timestamped snapshot. Weather can drive a clearly labeled hypothetical delay policy; aircraft observations stay informational.</p></div><button id="fetchWeather">Fetch airport weather ↻</button></div><div id="weatherLive" class="muted">Public NOAA airport observations · no API key required · manual refresh only.</div><button id="applyWeather" class="quiet" disabled>Project observed weather into this scenario →</button><p class="muted">Replaces canned weather with modeled holds at synthetic 19:00: VFR 0m · MVFR 15m · IFR 30m · LIFR 60m; gusts ≥30kt at least 45m; thunderstorms at least 60m. Not an official closure. Applying creates a new revision and invalidates previous experiments.</p><details><summary>Flightradar24 aircraft nearby</summary><p id="fr24Status">Checking server configuration…</p><label>Airport <select id="liveAirport"><option>PIT</option><option>BOS</option><option>JFK</option><option>DCA</option><option>ORD</option><option>DTW</option></select></label> <label><input id="fr24Consent" type="checkbox"> Use API credits for one request (up to 50 tracked objects).</label> <button id="fetchAircraft" class="quiet">Fetch aircraft snapshot</button><p class="muted">Low ground speed does not confirm an aircraft is parked, at a gate, or available for a swap. Some ground vehicles may be included. No synthetic tail is automatically matched to a real aircraft.</p><div id="aircraftLive"></div></details><div id="liveMessage" role="status" aria-live="polite"></div></section></details><section id="history" class="panel"><div class="section-head"><div><span class="eyebrow">THE DECISION RECORD</span><h2>Scenario history</h2></div><button id="refresh" class="quiet">Refresh ↻</button></div><div id="historyList"></div><div id="events"></div></section><footer>FlowBetter / Hackathon prototype <span>Deterministic simulation · Advisory AI · Human approval</span></footer></main><script src="/static/app.js"></script><script src="/static/live.js"></script><script src="/static/recovery-options.bundle.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlowBetter · Ground ops desk</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<aside>
+  <a class="brand" href="/">✳ <span>FlowBetter<small>GROUND OPS DESK</small></span></a>
+  <div class="workspace"><span class="dot"></span> Local simulation <span class="pill">DEMO</span></div>
+  <nav>
+    <a class="active" href="#pick">① Issues</a>
+    <a href="#situation">② Ground picture</a>
+    <a href="#options">③ Options</a>
+    <a href="#history">History</a>
+  </nav>
+  <div class="side-note">
+    <span class="eyebrow">DECADE-BACKED TEACHING</span>
+    <p>Pick up to 4 ground issues.<br>See the airfield picture.<br>Choose a recovery option.</p>
+    <small>Synthetic PIT hub · BTS/NOAA-inspired magnitudes · no live airborne tracking.</small>
+  </div>
+  <label class="desk-label">Desk workspace
+    <input id="desk" value="default" maxlength="64" aria-label="Desk workspace">
+  </label>
+  <button id="switchDesk" class="quiet">Switch desk →</button>
+</aside>
+
+<main>
+  <header>
+    <div>
+      <span class="eyebrow">OPERATIONS / GROUND DESK</span>
+      <h1>Recover the bank on the ground.</h1>
+      <p>Weather, mechanical, crew, ramp, and network issues — up to four at once. On-ground only.</p>
+    </div>
+    <span class="system"><i></i> Model v3</span>
+  </header>
+
+  <div id="message" role="status" aria-live="polite"></div>
+
+  <section id="pick" class="panel">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">01 / SELECT ISSUES</span>
+        <h2>What is breaking on the ground?</h2>
+        <p class="muted">Choose 1–4 catalog issues. Each carries a decade-analysis note from the six-airport stress pack.</p>
+      </div>
+      <div class="controls compact">
+        <label>Seed <input id="seed" type="number" min="0" max="999999" value="42"></label>
+        <span id="pickCount" class="pill">0 / 4</span>
+        <button id="runScenario" disabled>Build ground picture →</button>
+      </div>
+    </div>
+    <div id="issueGrid" class="issue-grid"></div>
+  </section>
+
+  <section id="situation" class="panel" hidden>
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">02 / CURRENT SITUATION</span>
+        <h2 id="sitHeadline">Ground picture</h2>
+        <p id="sitMeta" class="muted"></p>
+      </div>
+      <span id="severityPill" class="pill"></span>
+    </div>
+    <div class="metrics" id="sitMetrics"></div>
+    <div class="two-col">
+      <div>
+        <h3>Alerts</h3>
+        <ul id="sitAlerts" class="plain-list"></ul>
+        <h3>Decade links</h3>
+        <ul id="sitDecade" class="plain-list muted"></ul>
+      </div>
+      <div>
+        <h3>Aircraft on the ground</h3>
+        <div id="sitAircraft" class="table-wrap"></div>
+        <h3>Crews</h3>
+        <div id="sitCrews" class="table-wrap"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="options" class="panel" hidden>
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">03 / OPTIONS &amp; TRADEOFFS</span>
+        <h2>Pick a recovery path</h2>
+        <p class="muted">Money, people, regulation notes, and flight impacts — approve one feasible option in simulation.</p>
+      </div>
+    </div>
+    <div id="optionList" class="option-list"></div>
+    <div id="decision" class="decision" hidden></div>
+  </section>
+
+  <section id="history" class="panel">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">DECISION RECORD</span>
+        <h2>Scenario history</h2>
+      </div>
+      <button id="refresh" class="quiet">Refresh ↻</button>
+    </div>
+    <div id="historyList"></div>
+  </section>
+
+  <footer>FlowBetter / ground-ops desk <span>Decade-backed teaching · Simulation only</span></footer>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

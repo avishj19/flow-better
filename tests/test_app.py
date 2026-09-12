@@ -1,57 +1,100 @@
+"""API tests for the ground-ops desk."""
 import concurrent.futures
+
 import pytest
 from fastapi.testclient import TestClient
-from backend import app as a,store
+
+from backend import app as a
+
 
 @pytest.fixture
-def client(tmp_path,monkeypatch):
-    monkeypatch.setattr(a,'DATA',tmp_path)
+def client(tmp_path, monkeypatch):
+    monkeypatch.setattr(a, 'DATA', tmp_path)
     return TestClient(a.app)
-def prepared(client):
-    r=client.post('/api/scenarios',json={'seed':42}).json();ident=r['id']
-    r=client.post(f'/api/scenarios/{ident}/disrupt',json={'revision':0}).json()
-    r=client.post(f'/api/scenarios/{ident}/experiments',json={'revision':1}).json()
-    return r,{'revision':1,'experiment_id':r['experiments'][0]['id'],'plan':'loyalty','confirm':True}
 
-def test_full_flow_persistence_stale_and_rejected(client):
-    r,b=prepared(client);p=f"/api/scenarios/{r['id']}/approve"
-    assert client.post(p,json=dict(b,plan='cfo')).status_code==409
-    assert client.post(p,json=dict(b,confirm=False)).status_code==422
-    assert client.post(p,json=dict(b,revision=0)).status_code==409
-    ok=client.post(p,json=b);assert ok.status_code==200
-    final=ok.json();assert final['phase']=='recovered' and final['current']['metrics']['missed_pax']==0 and final['revision']==2
-    assert client.post(p,json=b).status_code==409
-    loaded=client.get('/api/scenarios/'+r['id']).json()
-    assert len(loaded['events'])==8 and loaded['current']==final['current']
-    assert client.get('/api/scenarios').json()[0]['phase']=='recovered'
 
-def test_desk_isolation_origin_and_validation(client):
-    r=client.post('/api/scenarios',json={}).json()
-    assert client.get('/api/scenarios/'+r['id'],headers={'X-IROP-Desk':'other'}).status_code==404
-    assert client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'}).status_code==400
-    assert client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'}).status_code==403
-    assert client.post('/api/scenarios',json={},headers={'Origin':'http://127.0.0.1:8010'}).status_code==200
-    assert client.post('/api/scenarios',json={'seed':True}).status_code==422
+def create_run(client, issue_ids=None, seed=42, headers=None):
+    body = {'seed': seed, 'issue_ids': issue_ids or ['mx_tail_late', 'crew_timeout']}
+    return client.post('/api/scenarios', json=body, headers=headers or {})
 
-def test_tamper_revalidation(client):
-    r,b=prepared(client);r['scenario']['tails']['R01']['capacity']=1;store.save_run(a.DATA,r)
-    assert client.post(f"/api/scenarios/{r['id']}/approve",json=b).status_code==409
+
+def test_health_and_issues(client):
+    h = client.get('/api/health').json()
+    assert h['ok'] and h['model_version'] == 3 and h['mode'] == 'ground_ops_desk'
+    issues = client.get('/api/issues').json()
+    assert issues['max_select'] == 4
+    assert len(issues['issues']) >= 10
+
+
+def test_create_situation_and_approve(client):
+    r = create_run(client, ['wx_ne_cascade', 'overnight_squeeze']).json()
+    assert r['phase'] == 'options'
+    assert r['situation']['holds']
+    assert 3 <= len(r['options']) <= 5
+    feasible = next(o for o in r['options'] if o['feasible'])
+    bad = client.post(
+        f"/api/scenarios/{r['id']}/approve",
+        json={'option_id': feasible['id'], 'confirm': False},
+    )
+    assert bad.status_code == 422
+    ok = client.post(
+        f"/api/scenarios/{r['id']}/approve",
+        json={'option_id': feasible['id'], 'confirm': True},
+    )
+    assert ok.status_code == 200
+    final = ok.json()
+    assert final['phase'] == 'done'
+    assert final['selected_option_id'] == feasible['id']
+    assert final['decision']['title'] == feasible['title']
+    assert client.post(
+        f"/api/scenarios/{r['id']}/approve",
+        json={'option_id': feasible['id'], 'confirm': True},
+    ).status_code == 409
+    listed = client.get('/api/scenarios').json()
+    assert listed[0]['phase'] == 'done'
+    loaded = client.get(f"/api/scenarios/{r['id']}").json()
+    assert loaded['decision']['option_id'] == feasible['id']
+
+
+def test_validation_and_blocked_option(client):
+    assert client.post('/api/scenarios', json={'seed': 1, 'issue_ids': []}).status_code == 422
+    assert client.post(
+        '/api/scenarios',
+        json={'seed': 1, 'issue_ids': ['wx_pit_snow'] * 2},
+    ).status_code == 400
+    r = create_run(client, ['wx_ne_cascade']).json()
+    blocked = next(o for o in r['options'] if not o['feasible'])
+    assert client.post(
+        f"/api/scenarios/{r['id']}/approve",
+        json={'option_id': blocked['id'], 'confirm': True},
+    ).status_code == 409
+
+
+def test_desk_isolation_and_origin(client):
+    r = create_run(client).json()
+    assert client.get(f"/api/scenarios/{r['id']}", headers={'X-IROP-Desk': 'other'}).status_code == 404
+    assert client.get('/api/scenarios', headers={'X-IROP-Desk': '../other'}).status_code == 400
+    assert client.post(
+        '/api/scenarios',
+        json={'seed': 1, 'issue_ids': ['ramp_short']},
+        headers={'Origin': 'http://evil.test'},
+    ).status_code == 403
+    assert client.post(
+        '/api/scenarios',
+        json={'seed': 1, 'issue_ids': ['ramp_short']},
+        headers={'Origin': 'http://127.0.0.1:8010'},
+    ).status_code == 200
+
 
 def test_duplicate_approval_concurrent(client):
-    r,b=prepared(client)
+    r = create_run(client, ['gate_conflict', 'misconnect_wave']).json()
+    opt = next(o for o in r['options'] if o['feasible'])
+    body = {'option_id': opt['id'], 'confirm': True}
+    path = f"/api/scenarios/{r['id']}/approve"
     with concurrent.futures.ThreadPoolExecutor(2) as pool:
-        codes=list(pool.map(lambda _:client.post(f"/api/scenarios/{r['id']}/approve",json=b).status_code,range(2)))
-    assert sorted(codes)==[200,409]
-
-def test_live_consent_and_phase(client):
-    r=client.post('/api/scenarios',json={}).json();path='/api/scenarios/'+r['id']
-    assert client.post(path+'/experiments',json={'revision':0}).status_code==409
-    client.post(path+'/disrupt',json={'revision':0})
-    assert client.post(path+'/disrupt',json={'revision':1}).status_code==409
-    assert client.post(path+'/experiments',json={'revision':1,'mode':'live','consent':False}).status_code==422
+        codes = list(pool.map(lambda _: client.post(path, json=body).status_code, range(2)))
+    assert sorted(codes) == [200, 409]
 
 
-def test_archive_readonly(client):
-    r=client.post('/api/scenarios',json={}).json();r['scenario'].pop('model_version');store.save_run(a.DATA,r)
-    assert client.get('/api/scenarios/'+r['id']).status_code==200
-    assert client.post('/api/scenarios/'+r['id']+'/disrupt',json={'revision':0}).status_code==409
+def test_status_alias(client):
+    assert client.get('/api/status').json()['model_version'] == 3
