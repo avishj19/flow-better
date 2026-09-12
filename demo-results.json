@@ -14,11 +14,29 @@
       "scope": "Simplified Part 117-inspired duty model; actual FAA legality is not evaluated."
     }
   },
+  "search": {
+    "evaluated": [
+      "holdback",
+      "trim"
+    ],
+    "surfaced": [
+      "holdback"
+    ],
+    "dominated": [
+      "trim"
+    ]
+  },
+  "brief": "PIT hub desk brief \u00b7 seed 42 \u00b7 synthetic model, not an airline quote or FAA finding\n\nREJECT\n- The CFO Choice \u2014 $31,500 \u00b7 passengers 33,845 \u00b7 network 20,000 \u00b7 crew -95m. REJECTED: Exceeds modeled crew duty limits by 95 minutes.\n\nFEASIBLE \u00b7 Pareto \u00b7 no hidden score\n- The Operations Choice \u2014 $37,000 \u00b7 passengers 305,015 \u00b7 network 0 \u00b7 crew +50m. Cancel the final ORD round trip and keep the aircraft at PIT for tomorrow.\n- The Search Choice \u2014 $23,500 \u00b7 passengers 12,635 \u00b7 network 20,000 \u00b7 crew +50m. Bounded search: ferry the spare in, operate the bank, and skip the return ferry that still misses the overnight cutoff.\n\nFEASIBLE \u00b7 dominated by another scored option\n- The Loyalty Choice \u2014 $37,000 \u00b7 passengers 12,635 \u00b7 network 20,000 \u00b7 crew +50m. Kept visible so the named strategy can be compared to the search result.\n\nDecision rule: discard illegal plans. Among Pareto options, pick the hub priority (passengers vs tomorrow\u2019s metal). Do not average the pillars.",
   "options": [
     {
       "plan": "cfo",
+      "title": "The CFO Choice",
+      "description": "Wait for maintenance and keep the original aircraft and crew.",
+      "discovered": false,
       "feasible": false,
       "isLegal": false,
+      "pareto_optimal": false,
+      "best_for": [],
       "scores": {
         "financial_cost": 31500,
         "passenger_impact": 33845,
@@ -220,13 +238,19 @@
             "penalty": 0
           }
         ]
-      },
-      "pareto_optimal": false
+      }
     },
     {
       "plan": "loyalty",
+      "title": "The Loyalty Choice",
+      "description": "Ferry a spare from DTW, use reserve crew, then ferry it home.",
+      "discovered": false,
       "feasible": true,
       "isLegal": true,
+      "pareto_optimal": false,
+      "best_for": [
+        "passenger_impact"
+      ],
       "scores": {
         "financial_cost": 37000,
         "passenger_impact": 12635,
@@ -435,13 +459,19 @@
             "penalty": 20000
           }
         ]
-      },
-      "pareto_optimal": true
+      }
     },
     {
       "plan": "operations",
+      "title": "The Operations Choice",
+      "description": "Cancel the final ORD round trip and keep the aircraft at PIT for tomorrow.",
+      "discovered": false,
       "feasible": true,
       "isLegal": true,
+      "pareto_optimal": true,
+      "best_for": [
+        "network_health"
+      ],
       "scores": {
         "financial_cost": 37000,
         "passenger_impact": 305015,
@@ -643,8 +673,229 @@
             "penalty": 0
           }
         ]
+      }
+    },
+    {
+      "plan": "holdback",
+      "title": "The Search Choice",
+      "description": "Bounded search: ferry the spare in, operate the bank, and skip the return ferry that still misses the overnight cutoff.",
+      "discovered": true,
+      "feasible": true,
+      "isLegal": true,
+      "pareto_optimal": true,
+      "best_for": [
+        "financial_cost",
+        "passenger_impact"
+      ],
+      "scores": {
+        "financial_cost": 23500,
+        "passenger_impact": 12635,
+        "network_health": 20000,
+        "crew_buffer": {
+          "hours_remaining": 0.833,
+          "minutes_remaining": 50,
+          "exceeds_by_minutes": 0,
+          "isLegal": true,
+          "scope": "Simplified Part 117-inspired duty model; actual FAA legality is not evaluated."
+        }
       },
-      "pareto_optimal": true
+      "metrics": {
+        "delayed_flights": 3,
+        "cancelled_flights": 0,
+        "delay_minutes": 105,
+        "passenger_minutes": 12635,
+        "missed_pax": 0,
+        "cost": 23500,
+        "cost_breakdown": {
+          "delay": 10500,
+          "ferry_flights": 10000,
+          "cancellations": 0,
+          "reserve_crews": 3000
+        }
+      },
+      "details": {
+        "delay_minutes": 105,
+        "ferries": 1,
+        "cancelled": 0,
+        "reserve_crews": 1,
+        "passenger_minutes": 12635,
+        "missed_pax": 0,
+        "cost_breakdown": {
+          "delay": 10500,
+          "ferry_flights": 10000,
+          "cancellations": 0,
+          "reserve_crews": 3000
+        },
+        "crew_buffers": [
+          {
+            "crew": "C01",
+            "report": 710,
+            "release": 1115,
+            "deadline": 1360,
+            "minutes_remaining": 245
+          },
+          {
+            "crew": "C02",
+            "report": 718,
+            "release": 1358,
+            "deadline": 1408,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C03",
+            "report": 726,
+            "release": 1331,
+            "deadline": 1416,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C04",
+            "report": 734,
+            "release": 1339,
+            "deadline": 1424,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C05",
+            "report": 742,
+            "release": 1347,
+            "deadline": 1432,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C06",
+            "report": 750,
+            "release": 1355,
+            "deadline": 1440,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C07",
+            "report": 758,
+            "release": 1398,
+            "deadline": 1448,
+            "minutes_remaining": 50
+          },
+          {
+            "crew": "C08",
+            "report": 766,
+            "release": 1371,
+            "deadline": 1456,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C09",
+            "report": 774,
+            "release": 1379,
+            "deadline": 1464,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "C10",
+            "report": 782,
+            "release": 1387,
+            "deadline": 1472,
+            "minutes_remaining": 85
+          },
+          {
+            "crew": "RC01",
+            "report": 1020,
+            "release": 1350,
+            "deadline": 1710,
+            "minutes_remaining": 360
+          }
+        ],
+        "overnight_positions": [
+          {
+            "tail": "T01",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1400,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T02",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T03",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T04",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T05",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T06",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T07",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T08",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T09",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "T10",
+            "position": "PIT",
+            "hub": "PIT",
+            "deadline": 1440,
+            "out_of_position": false,
+            "penalty": 0
+          },
+          {
+            "tail": "R01",
+            "position": "PIT",
+            "hub": "DTW",
+            "deadline": 1400,
+            "out_of_position": true,
+            "penalty": 20000
+          }
+        ]
+      }
     }
   ]
 }

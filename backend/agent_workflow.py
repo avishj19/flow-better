@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 import httpx
-from .simulator import simulate, rank, PLANS, scope_evidence
+from .simulator import simulate, rank, PLANS, scope_evidence, discover, desk_brief
 
 TOOLS=[{'type':'function','name':'inspect_scenario','description':'Read aggregate network/disruption counts and available bounded plans.', 'parameters':{'type':'object','properties':{},'required':[],'additionalProperties':False},'strict':True},
        {'type':'function','name':'simulate_recovery','description':'Simulate one fixed plan and independently validate it. Returns aggregate metrics and constraint evidence IDs.', 'parameters':{'type':'object','properties':{'plan':{'type':'string','enum':list(PLANS)}},'required':['plan'],'additionalProperties':False},'strict':True}]
@@ -53,7 +53,7 @@ def run(s, revision, mode='local', consent=False, call_model=None, persist=lambd
         if mode=='local':
             event('Tool','inspect_scenario',tool('inspect_scenario',{}))
             for p in PLANS:event('Verifier','simulate_recovery',tool('simulate_recovery',{'plan':p}))
-            report['explanation']='The local fixed plan simulated all three strategies. Four separate scores expose the trade-offs; only plans passing the hard constraints can be approved. There is no single weighted winner. No language model ran.'
+            report['explanation']='The local fixed plan simulated the three named strategies, then a bounded action search. Four separate scores expose the trade-offs; only plans passing the hard constraints can be approved. There is no single weighted winner. No language model ran.'
         else:
             items=[{'role':'user','content':'Inspect the synthetic scenario, compare recovery options, and explain with evidence citations.'}];calls=0
             for turn in range(6):
@@ -77,7 +77,11 @@ def run(s, revision, mode='local', consent=False, call_model=None, persist=lambd
                     event('Tool',fn.get('name'),result)
                     items.append({'type':'function_call_output','call_id':fn['call_id'],'output':json.dumps(result)})
             else:raise ValueError('Model-turn budget reached')
+        if len(report['options'])>=3:
+            report['options'],report['search']=discover(s,report['options'])
+            event('Verifier','bounded_search',report['search'])
         report['options']=rank(report['options'])
+        report['brief']=desk_brief(report['options'],s.get('seed'))
         report['recommendation']=None
         report['feasible_plans']=[o['plan'] for o in report['options'] if o['feasible']]
         report['status']='completed'

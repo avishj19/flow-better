@@ -1,6 +1,6 @@
 # FlowBetter — explainable airline recovery
 
-A dark-mode Airline IROP Recovery Dashboard: generate a synthetic day, apply four disruptions, compare three recovery strategies, inspect the underlying math, and approve a plan inside the simulation. Existing navigation, network, timeline and history structure are retained; React renders the recovery cards.
+A dark-mode Airline IROP Recovery Dashboard: generate a synthetic day, apply four disruptions, compare three named recovery strategies plus any undominated bounded-search result, inspect the underlying math, and approve a plan inside the simulation. Existing navigation, network, timeline and history structure are retained; React renders the recovery cards.
 
 ## Run
 
@@ -24,16 +24,18 @@ npm test
 python -m pytest -q
 ```
 
-## Demo: four disruptions, three decisions
+## Demo: four disruptions, a search, two legal trade-offs
 
-1. Generate seed **42**: 60 flights, six airports, ten operating aircraft and a valid on-time baseline.
-2. Apply four connected disruptions:
+**One click:** `Play seed 42 demo →` generates, injects the four disruptions, and compares strategies. Stepped buttons still work.
+
+1. Seed **42**: 60 flights, six airports, ten operating aircraft and a valid on-time baseline.
+2. Four connected disruptions:
    - **Maintenance:** T01 is released at 20:45, 105 minutes after RX104's scheduled departure.
    - **Ground operations:** synthetic ORD Slack text adds 45 minutes to affected turnarounds.
    - **Crew:** C01's updated duty budget leaves only 45 minutes beyond its original final release.
    - **Overnight positioning:** T01 must reach PIT by 23:20 to protect tomorrow's first rotation.
-3. Compare **CFO**, **Loyalty** and **Operations**. Inspect context, math citations, crew checks, overnight positions and the timeline.
-4. CFO approval is disabled because its modeled crew duty exceeds the limit. Choose either feasible trade-off and approve in simulation. History preserves the decision and evidence.
+3. Compare **CFO**, **Loyalty**, **Operations**, and any **Search** card the bounded extra-action pass surfaces. Inspect context, math citations, crew checks, overnight positions, the rotation-1 timeline, and the desk brief.
+4. CFO approval is disabled because its modeled crew duty exceeds the limit. On seed 42, Search (ferry in, no return) matches Loyalty’s passenger score at lower cash, so Loyalty is feasible but dominated. Operations remains the network-protecting trade-off. Approve one feasible plan in simulation. History preserves the decision and evidence.
 
 Weather is optional, collapsed near the bottom. The default scenario requires no external provider. “Try a remote reserve” and the old six-option ranking are removed.
 
@@ -62,26 +64,27 @@ A bounded deterministic parser extracts ORD and 45 minutes. Affected arrivals fr
 
 ### Computed default results
 
-| Strategy | Financial cost | Passenger points | Network penalty | Minimum crew buffer | Feasible |
-|---|---:|---:|---:|---:|---|
-| CFO — wait for original resources | $31,500 | 33,845 | 20,000 | −95 min | No |
-| Loyalty — spare, reserve crew, two ferries | $37,000 | 12,635 | 20,000 | 50 min | Yes |
-| Operations — cancel final ORD round trip | $37,000 | 305,015 | 0 | 50 min | Yes |
+| Strategy | Financial cost | Passenger points | Network penalty | Minimum crew buffer | Feasible | Pareto |
+|---|---:|---:|---:|---:|---|---|
+| CFO — wait for original resources | $31,500 | 33,845 | 20,000 | −95 min | No | No |
+| Loyalty — spare, reserve crew, two ferries | $37,000 | 12,635 | 20,000 | 50 min | Yes | No (dominated by Search) |
+| Operations — cancel final ORD round trip | $37,000 | 305,015 | 0 | 50 min | Yes | Yes |
+| Search — ferry spare in, skip the late return | $23,500 | 12,635 | 20,000 | 50 min | Yes | Yes |
 
-These are synthetic outcomes, not observed airline results. CFO spends least but cannot be approved. Loyalty and Operations share financial cost here and trade passenger continuity against overnight positioning. The interface identifies non-dominated feasible strategies without selecting a hidden weighted winner. Changing the seed changes passenger loads, not the fixed topology or disruption template. `demo-results.json` contains reproducible model-v2 outputs.
+These are synthetic outcomes, not observed airline results. CFO spends least but cannot be approved. Search matches Loyalty’s passenger score without paying for a return ferry that still misses the spare’s overnight cutoff. Operations is the remaining network trade-off. The interface identifies non-dominated feasible strategies without selecting a hidden weighted winner. Changing the seed changes passenger loads, not the fixed topology or disruption template. `demo-results.json` contains reproducible model-v2 outputs.
 
 ## Components and architecture
 
 - `frontend/components/RecoveryOptions.jsx`: React recovery cards, three impact bars, crew rejection, rationale/context/citations and approval controls.
 - `frontend/scoring.js`: formatting, relative impact indicators and approval eligibility presentation utilities. Python remains authoritative.
 - `frontend/app.js`: existing page workflow, selected schedule/evidence, connections, timeline and saved history.
-- `backend/simulator.py`: generator, bounded strategies, propagation, four scores, independent validation and explainability.
-- `backend/agent_workflow.py`: deterministic tool workflow or optional bounded OpenAI Responses planner. All three strategies must be evaluated; no auto-approval.
+- `backend/simulator.py`: generator, named strategies, bounded extra-action search, propagation, four scores, independent validation, desk brief and explainability.
+- `backend/agent_workflow.py`: deterministic tool workflow or optional bounded OpenAI Responses planner. All three named strategies must be evaluated; the server then searches extra action sets. No auto-approval.
 - `backend/app.py` / `backend/store.py`: revision/digest protection, API, atomic SQLite persistence and desk separation.
 
 State moves baseline → disrupted → recovered. Approval requires a current completed experiment, explicit simulation approval, all hard checks passing and an unchanged rerun digest. Stale, duplicate or changed-input approvals fail. Older model-v1 scenarios remain inspectable in history; generate a new scenario to use model-v2 recovery.
 
-All schedules are synthetic, use one shared notional clock and assume 60-minute flights. Aircraft turns are normally 30 minutes, crew transfers 20 minutes, connection transfers 35 minutes. Gate occupancy is modeled around arrivals/departures. Tomorrow's network impact is an overnight-position proxy, not a simulated next-day network. The three fixed strategies are not a global optimization search.
+All schedules are synthetic, use one shared notional clock and assume 60-minute flights. Aircraft turns are normally 30 minutes, crew transfers 20 minutes, connection transfers 35 minutes. Gate occupancy is modeled around arrivals/departures. Tomorrow's network impact is an overnight-position proxy, not a simulated next-day network. The named strategies plus two extra action sets are a bounded teaching search, not a global optimization.
 
 SQLite history and desk IDs provide organization, not authentication. This is a single-user loopback prototype. No real airline actions are exposed.
 
@@ -93,7 +96,7 @@ No actual OpenAI provider run was performed for this refactor; scripted integrat
 
 ## Verification
 
-55 backend tests and three JavaScript utility tests pass. Coverage includes formula arithmetic, text-to-delay counterfactuals, all three trade-offs, cancellation/ferry continuity, modeled hard constraints, stale/concurrent approvals, legacy scenario guards, planner bounds/citations and live-data adapter failures. Backend tests report two upstream Starlette/AnyIO warnings. The Python suite used the existing local Python environment; a fresh dependency installation has not been separately exercised.
+57 backend tests and four JavaScript utility tests pass. Coverage includes formula arithmetic, text-to-delay counterfactuals, named trade-offs, bounded search, cancellation/ferry continuity, modeled hard constraints, stale/concurrent approvals, the one-click demo path, legacy scenario guards, planner bounds/citations and live-data adapter failures. Backend tests report two upstream Starlette/AnyIO warnings. The Python suite used the existing local Python environment; a fresh dependency installation has not been separately exercised.
 
 The app originated as an isolated TradeOps adaptation; the original TradeOps project remains unchanged. Local `legacy/`, runtime data, credentials, build dependencies and working files are ignored by Git.
 
@@ -119,6 +122,6 @@ The panel shows registration, flight/callsign, type, altitude, ground speed and 
 
 The official FR24 request/schema and error paths were tested with scripted data; no token was available for an actual FR24 provider run. Public NOAA observations were retrieved successfully for all six airports. Their initial VFR categories correctly produced no modeled weather closures.
 
-Additional tests cover weather parsing, cache behavior, projection weights, missing/stale/future/unknown observations, token and consent gates, FR24 bounds/headers/limits, uncertain ground state, provider failure, snapshot persistence, revision invalidation and expired-basis approval rejection. The complete backend suite now has 55 passing tests.
+Additional tests cover weather parsing, cache behavior, projection weights, missing/stale/future/unknown observations, token and consent gates, FR24 bounds/headers/limits, uncertain ground state, provider failure, snapshot persistence, revision invalidation and expired-basis approval rejection. The complete backend suite now has 57 passing tests.
 
 References: [official FR24 Python SDK and typed schemas](https://github.com/Flightradar24/fr24api-sdk-python), [FR24 FAQ](https://fr24api.flightradar24.com/docs/faq), [FR24 sandbox behavior](https://fr24api.flightradar24.com/docs/sandbox-environment), [AWC API guidance](https://aviationweather.gov/data/api/).
