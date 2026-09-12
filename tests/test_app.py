@@ -55,3 +55,15 @@ def test_archive_readonly(client):
     r=client.post('/api/scenarios',json={}).json();r['scenario'].pop('model_version');store.save_run(a.DATA,r)
     assert client.get('/api/scenarios/'+r['id']).status_code==200
     assert client.post('/api/scenarios/'+r['id']+'/disrupt',json={'revision':0}).status_code==409
+
+def test_virtual_agent_and_network_endpoints(client):
+    r=client.post('/api/scenarios',json={'seed':42}).json()
+    assert r['name'].startswith('PIT overnight hub')
+    assert client.get('/api/status').json()['virtual_agent'] is True
+    net=client.get(f"/api/scenarios/{r['id']}/network").json()
+    assert net['hub']=='PIT' and net['overnight_hubs']['DTW']['tails']==['R01']
+    chat=client.post(f"/api/scenarios/{r['id']}/agent",json={'message':'Brief the overnight hubs'}).json()
+    assert chat['topic']=='overnight_hub' and 'PIT' in chat['highlights']
+    assert client.post(f"/api/scenarios/{r['id']}/agent",json={'message':''}).status_code==422
+    starters=client.get('/api/agent/starters').json()
+    assert 'Brief the overnight hubs' in starters['prompts']
