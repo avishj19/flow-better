@@ -28,8 +28,10 @@ def test_full_flow_persistence_stale_and_rejected(client):
 def test_desk_isolation_origin_and_validation(client):
     r=client.post('/api/scenarios',json={}).json()
     assert client.get('/api/scenarios/'+r['id'],headers={'X-IROP-Desk':'other'}).status_code==404
-    assert client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'}).status_code==400
-    assert client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'}).status_code==403
+    bad_desk=client.get('/api/scenarios',headers={'X-IROP-Desk':'../other'})
+    assert bad_desk.status_code==400 and bad_desk.json()['detail']
+    blocked=client.post('/api/scenarios',json={},headers={'Origin':'http://evil.test'})
+    assert blocked.status_code==403 and blocked.json()['detail']=='Cross-origin writes forbidden'
     assert client.post('/api/scenarios',json={},headers={'Origin':'http://127.0.0.1:8010'}).status_code==200
     assert client.post('/api/scenarios',json={'seed':True}).status_code==422
 
