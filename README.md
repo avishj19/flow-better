@@ -1,4 +1,8 @@
-# FlowBetter — explainable airline recovery
+# FlowBetter — airport recovery workspace
+
+The cinematic airport website now embeds the complete working recovery desk at `/#simulation`. All seven feature branches are integrated. See [INTEGRATION-HANDOFF.md](INTEGRATION-HANDOFF.md) for the feature inventory, local run instructions, and the remaining Python hosting connection for the published Sites URL. The old standalone frontend entrypoint has been removed; `/desk` redirects into this website.
+
+**Airport-facing website:** the new cinematic landing page is served at `/`; the complete recovery dashboard is now at `/desk`. See [WEBSITE-HANDOFF.md](WEBSITE-HANDOFF.md) for site editing, assets, motion, and hosting details.
 
 A dark-mode Airline IROP Recovery Dashboard: generate a synthetic day, apply four disruptions, compare three recovery strategies, inspect the underlying math, and approve a plan inside the simulation. Existing navigation, network, timeline and history structure are retained; React renders the recovery cards.
 
@@ -19,7 +23,7 @@ The React bundle is included, so running the demo requires no Node build. After 
 
 ```sh
 npm ci
-npm run build
+npm run build:dashboard
 npm test
 python -m pytest -q
 ```
@@ -77,23 +81,41 @@ These are synthetic outcomes, not observed airline results. CFO spends least but
 - `frontend/app.js`: existing page workflow, selected schedule/evidence, connections, timeline and saved history.
 - `backend/simulator.py`: generator, bounded strategies, propagation, four scores, independent validation and explainability.
 - `backend/agent_workflow.py`: deterministic tool workflow or optional bounded OpenAI Responses planner. All three strategies must be evaluated; no auto-approval.
+- `backend/analysis_agent.py` + `backend/decade_data.py`: on-demand **decade analyst** grounded in bundled BTS/FAA/NOAA CSVs under `backend/decade_pack/`. Local answers need no API key; optional live mode is consent-gated and tool-bounded. Does not auto-approve and does not poll in the background.
 - `backend/app.py` / `backend/store.py`: revision/digest protection, API, atomic SQLite persistence and desk separation.
 
 State moves baseline → disrupted → recovered. Approval requires a current completed experiment, explicit simulation approval, all hard checks passing and an unchanged rerun digest. Stale, duplicate or changed-input approvals fail. Older model-v1 scenarios remain inspectable in history; generate a new scenario to use model-v2 recovery.
 
 All schedules are synthetic, use one shared notional clock and assume 60-minute flights. Aircraft turns are normally 30 minutes, crew transfers 20 minutes, connection transfers 35 minutes. Gate occupancy is modeled around arrivals/departures. Tomorrow's network impact is an overnight-position proxy, not a simulated next-day network. The three fixed strategies are not a global optimization search.
 
-SQLite history and desk IDs provide organization, not authentication. This is a single-user loopback prototype. No real airline actions are exposed.
+SQLite history and desk IDs provide organization, not authentication, until Auth0 is configured. This remains a simulation: no real airline actions are exposed.
+
+## Optional Auth0 desk security
+
+When `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` and `AUTH0_CLIENT_ID` are set, the recovery desk stops trusting the `X-IROP-Desk` header. Operators sign in with Auth0 Universal Login (SPA + PKCE). Access tokens are validated on the FastAPI API with `auth0-fastapi-api`. The workspace is taken from the token: Auth0 Organization slug, the namespaced `https://flowbetter.app/desk` claim, or a per-user `u-` workspace.
+
+| Permission | Who | What it unlocks |
+|---|---|---|
+| `read:scenarios` | Viewer | History, timeline, evidence |
+| `write:scenarios` | Analyst | Generate, disrupt, compare, project weather |
+| `fetch:observations` | Analyst | NOAA / FR24 snapshot fetch (FR24 token stays server-side) |
+| `approve:recovery` | Approver | The only path that locks a simulation decision |
+
+Approvals record the Auth0 `sub` and organization on the event. If an analyst tries to approve, the API returns `insufficient_scope` and the UI can send them through MFA step-up (`acr_values` + `max_age=0`). Configure a post-login Action so `approve:recovery` is only added after MFA. Enable RBAC and **Add Permissions in the Access Token** on the Auth0 API.
+
+Create an Auth0 **API** with identifier `https://flowbetter.local/api` and a **Single Page Application** (no client secret) whose callback, logout, and web origins match this origin (`http://127.0.0.1:8011`). Organizations map one airline/airport OCC to one isolated SQLite desk. Local demo without those env vars stays open on loopback.
 
 ## Optional OpenAI planner
 
 Set server-side `OPENAI_API_KEY` and `TRADEOPS_AI_MODEL`, restart, then explicitly enable the UI consent checkbox. The Responses workflow exposes only bounded simulation tools and aggregate evidence, with six model turns, eight tool calls and a 45-second per-request timeout. It uses `store:false` and encrypted reasoning continuity. Explanation citations must reference observed evidence IDs; this verifies citation membership, not every natural-language claim. Provider failures remain visible failures. Local mode labels its rationale as a deterministic translation of verified math; it does not pretend an LLM ran.
 
+The **Decade analyst** panel (`/api/analysis/ask` and `/api/scenarios/{id}/analysis`) reuses the same credential pair for an optional live ask. Default local mode answers from the packed decade CSVs (OTP ranks, weather risk, flaw days, COVID traffic, scenario↔pillar context). Live asks send only aggregate pack query results, never raw schedule rows.
+
 No actual OpenAI provider run was performed for this refactor; scripted integration and request-contract tests cover that path.
 
 ## Verification
 
-55 backend tests and three JavaScript utility tests pass. Coverage includes formula arithmetic, text-to-delay counterfactuals, all three trade-offs, cancellation/ferry continuity, modeled hard constraints, stale/concurrent approvals, legacy scenario guards, planner bounds/citations and live-data adapter failures. Backend tests report two upstream Starlette/AnyIO warnings. The Python suite used the existing local Python environment; a fresh dependency installation has not been separately exercised.
+Backend tests and three JavaScript utility tests cover the four-pillar model plus optional Auth0 desk isolation. Coverage includes formula arithmetic, text-to-delay counterfactuals, all three trade-offs, cancellation/ferry continuity, modeled hard constraints, stale/concurrent approvals, legacy scenario guards, planner bounds/citations and live-data adapter failures. Backend tests report two upstream Starlette/AnyIO warnings. The Python suite used the existing local Python environment; a fresh dependency installation has not been separately exercised.
 
 The app originated as an isolated TradeOps adaptation; the original TradeOps project remains unchanged. Local `legacy/`, runtime data, credentials, build dependencies and working files are ignored by Git.
 

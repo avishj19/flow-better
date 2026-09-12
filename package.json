@@ -3,9 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild frontend/components/RecoveryOptions.jsx --bundle --minify --format=iife --outfile=frontend/recovery-options.bundle.js",
-    "test": "node --test frontend/scoring.test.js"
+    "build": "node scripts/build-website.mjs",
+    "test": "node --test frontend/scoring.test.js",
+    "build:dashboard": "esbuild frontend/components/RecoveryOptions.jsx --bundle --minify --format=iife --outfile=frontend/recovery-options.bundle.js",
+    "preview:website": "node scripts/preview-website.mjs"
   },
-  "dependencies": {"react": "^19.2.0", "react-dom": "^19.2.0"},
-  "devDependencies": {"esbuild": "^0.25.0"}
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
 }
