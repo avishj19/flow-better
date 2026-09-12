@@ -90,3 +90,10 @@ footer>div{display:flex;align-items:center;gap:20px;font-size:12px;color:#9db0c9
   .nav nav a{display:none}
   .nav nav a:first-child{display:block}
 }
+
+
+/* Quick UX clarity */
+.hero-actions{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:0 0 8px}
+.hero-actions .text-link{color:var(--ice);font-size:15px;text-decoration:underline;text-underline-offset:3px}
+.hero-actions .text-link:hover{color:#fff}
+.sim-cta .button,.hero-actions .button{min-width:180px;justify-content:center}

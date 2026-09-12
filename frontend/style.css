@@ -27,3 +27,17 @@
 .two-col .panel,.agent-grid .panel{background:transparent;border-left:0;border-right:0;border-radius:0}
 .agent-panel,.analysis-panel{background:transparent}
 .metric{border:1px solid var(--line);background:transparent}
+
+
+/* Desk UX clarity */
+.intro{position:sticky;top:0;z-index:3}
+.intro .controls button#generate{font-size:13px;padding:13px 20px;box-shadow:0 0 0 1px #7ee0d266}
+#empty{background:transparent;border-style:solid;border-color:#31465e}
+#empty h2{margin-bottom:8px}
+#empty .steps{gap:18px}
+#empty .steps span{background:#122033;border:1px solid #2b4057;border-radius:6px;padding:10px 14px}
+.panel h2{scroll-margin-top:90px}
+button#disrupt,button#evaluate{font-weight:700}
+.option-list .placeholder{padding:18px;border:1px dashed #31465e;border-radius:6px;background:#0d1928}
+.advanced-settings>summary{color:#9ec3c0}
+.optional-data>summary{color:#9ec3c0}
