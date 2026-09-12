@@ -12,8 +12,8 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ConfigDict
-from . import store, agent_workflow as workflow, live_data
-from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION
+from . import store, agent_workflow as workflow, live_data, virtual_agent
+from .simulator import generate, simulate, validate, scope_evidence, MODEL_VERSION, network_snapshot
 ROOT=Path(__file__).resolve().parents[1]
 DATA=Path(os.getenv('IROP_DATA',str(ROOT/'data')))
 app=FastAPI(title='FlowBetter · IROP Recovery Sandbox')
@@ -39,6 +39,8 @@ class Approval(Revision):
     experiment_id:str
     plan:str
     confirm:bool=False
+class AgentChat(Strict):
+    message:str=Field(min_length=1,max_length=500)
 
 def get(ident):
     r=store.get_run(DATA,ident)
@@ -54,17 +56,25 @@ def current_model(r):
     if r['scenario'].get('model_version')!=MODEL_VERSION:raise HTTPException(409,'Archived model: generate a new scenario to use four-pillar recovery')
 
 @app.get('/api/status')
-def status():return dict(status='ok',model_version=MODEL_VERSION,desk=store.get_desk(),**workflow.config())
+def status():return dict(status='ok',model_version=MODEL_VERSION,desk=store.get_desk(),virtual_agent=True,**workflow.config())
+@app.get('/api/agent/starters')
+def agent_starters():return {'prompts':virtual_agent.starter_prompts(),'scope':'Local desk agent · network + overnight hub briefings'}
 @app.get('/api/scenarios')
 def history():return store.list_run_summaries(DATA)
 @app.get('/api/scenarios/{ident}')
 def detail(ident:str):return get(ident)
+@app.get('/api/scenarios/{ident}/network')
+def scenario_network(ident:str):
+    r=get(ident);return network_snapshot(r['scenario'],r.get('current'))
+@app.post('/api/scenarios/{ident}/agent')
+def scenario_agent(ident:str,body:AgentChat):
+    return virtual_agent.respond(get(ident),body.message)
 @app.post('/api/scenarios')
 def create(body:Scenario):
     s=generate(body.seed); baseline=simulate(s,disrupted=False)
     if not baseline['feasible']:raise HTTPException(422,'Generated baseline failed validation')
-    r={'id':uuid.uuid4().hex,'name':f'PIT hub · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
-    event(r,'scenario_generated',{'seed':body.seed,'flights':len(s['flights'])});store.save_run(DATA,r);return r
+    r={'id':uuid.uuid4().hex,'name':f'PIT overnight hub · seed {body.seed}','created':datetime.now(timezone.utc).isoformat(),'seed':body.seed,'revision':0,'phase':'baseline','scenario':s,'baseline':baseline,'disrupted':None,'current':baseline,'experiments':[],'events':[]}
+    event(r,'scenario_generated',{'seed':body.seed,'flights':len(s['flights']),'hub':s.get('hub'),'overnight_hubs':sorted({t['overnight_hub'] for t in s['tails'].values()})});store.save_run(DATA,r);return r
 @app.post('/api/scenarios/{ident}/disrupt')
 def disrupt(ident:str,body:Revision):
     with lock:

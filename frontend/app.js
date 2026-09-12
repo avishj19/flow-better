@@ -56,7 +56,7 @@ function render() {
     ['Crew buffer',`${scores.crew_buffer.minutes_remaining}m`,scores.crew_buffer.minutes_remaining<0?'Hard constraint failed · modeled duty':'Minimum remaining across operating crews']
   ] : [['Financial cost',money(m.cost),'Archived cost formula'],['Passenger delay',num(m.passenger_minutes),'Archived passenger minutes'],['Missed connections',m.missed_pax,'Archived result'],['Model version','1','Generate a new scenario to use four pillars']];
   $('metrics').innerHTML=metrics.map(([label,value,note])=>`<div class="metric"><span class="label">${label}</span><strong>${value}</strong><small>${note}</small></div>`).join('');
-  renderNetwork();
+  if(typeof paintNetwork==='function') paintNetwork(); else renderNetwork();
   $('disruptions').innerHTML=state.scenario.disruptions.map(d=>`<div class="disruption"><b>${esc(d.id)}</b><div>${esc(d.label)}<small>${esc(d.kind.replaceAll('_',' ').toUpperCase())} · ${state.phase==='baseline'?'Ready to inject':'Applied'}</small></div></div>`).join('');
   $('signals').innerHTML=(state.scenario.unstructured_signals||[]).map(s=>`<div class="signal-box"><span class="eyebrow">UNSTRUCTURED INPUT · ${esc(s.id)}</span><blockquote>${esc(s.text)}</blockquote><p>Bounded parser extracts airport and added turnaround minutes. Source window: ${time(s.start)}–${time(s.end)}. Original text is preserved as evidence.</p></div>`).join('');
   $('disrupt').disabled=busy||!modern()||state.phase!=='baseline'; $('disrupt').textContent=state.phase==='baseline'?'Inject four disruptions →':'Disruptions applied ✓';
