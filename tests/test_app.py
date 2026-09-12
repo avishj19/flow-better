@@ -67,3 +67,17 @@ def test_virtual_agent_and_network_endpoints(client):
     assert client.post(f"/api/scenarios/{r['id']}/agent",json={'message':''}).status_code==422
     starters=client.get('/api/agent/starters').json()
     assert 'Brief the overnight hubs' in starters['prompts']
+
+def test_decade_analysis_on_demand(client):
+    status=client.get('/api/analysis/status').json()
+    assert status['available'] and status['airports'][0]=='PIT'
+    starters=client.get('/api/analysis/starters').json()
+    assert 'Rank 2024 on-time performance' in starters['prompts']
+    bare=client.post('/api/analysis/ask',json={'message':'Rank 2024 on-time performance'}).json()
+    assert bare['status']=='completed' and bare['topic']=='otp_rank' and 'PIT' in bare['reply']
+    assert client.post('/api/analysis/ask',json={'message':'hi','mode':'live','consent':False}).status_code==422
+    r=client.post('/api/scenarios',json={'seed':42}).json()
+    client.post(f"/api/scenarios/{r['id']}/disrupt",json={'revision':0})
+    ctx=client.post(f"/api/scenarios/{r['id']}/analysis",json={'message':'Context for this scenario’s airports'}).json()
+    assert ctx['status']=='completed' and ctx['topic']=='scenario' and 'ORD' in ctx['reply']
+    assert 'analysis' in client.get('/api/status').json()

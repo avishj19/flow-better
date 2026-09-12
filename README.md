@@ -79,6 +79,7 @@ These are synthetic outcomes, not observed airline results. CFO spends least but
 - `frontend/app.js`: existing page workflow, selected schedule/evidence, connections, timeline and saved history.
 - `backend/simulator.py`: generator, bounded strategies, propagation, four scores, independent validation and explainability.
 - `backend/agent_workflow.py`: deterministic tool workflow or optional bounded OpenAI Responses planner. All three strategies must be evaluated; no auto-approval.
+- `backend/analysis_agent.py` + `backend/decade_data.py`: on-demand **decade analyst** grounded in bundled BTS/FAA/NOAA CSVs under `backend/decade_pack/`. Local answers need no API key; optional live mode is consent-gated and tool-bounded. Does not auto-approve and does not poll in the background.
 - `backend/app.py` / `backend/store.py`: revision/digest protection, API, atomic SQLite persistence and desk separation.
 
 State moves baseline → disrupted → recovered. Approval requires a current completed experiment, explicit simulation approval, all hard checks passing and an unchanged rerun digest. Stale, duplicate or changed-input approvals fail. Older model-v1 scenarios remain inspectable in history; generate a new scenario to use model-v2 recovery.
@@ -90,6 +91,8 @@ SQLite history and desk IDs provide organization, not authentication. This is a 
 ## Optional OpenAI planner
 
 Set server-side `OPENAI_API_KEY` and `TRADEOPS_AI_MODEL`, restart, then explicitly enable the UI consent checkbox. The Responses workflow exposes only bounded simulation tools and aggregate evidence, with six model turns, eight tool calls and a 45-second per-request timeout. It uses `store:false` and encrypted reasoning continuity. Explanation citations must reference observed evidence IDs; this verifies citation membership, not every natural-language claim. Provider failures remain visible failures. Local mode labels its rationale as a deterministic translation of verified math; it does not pretend an LLM ran.
+
+The **Decade analyst** panel (`/api/analysis/ask` and `/api/scenarios/{id}/analysis`) reuses the same credential pair for an optional live ask. Default local mode answers from the packed decade CSVs (OTP ranks, weather risk, flaw days, COVID traffic, scenario↔pillar context). Live asks send only aggregate pack query results, never raw schedule rows.
 
 No actual OpenAI provider run was performed for this refactor; scripted integration and request-contract tests cover that path.
 

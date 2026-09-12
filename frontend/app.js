@@ -21,7 +21,7 @@ async function action(fn) {
   finally { busy=false; document.querySelectorAll('button:not(#optionList button)').forEach(b=>b.disabled=false); if(state)render(); else $('scenario').hidden=true; window.refreshLiveControls?.(); }
 }
 function accept(result) {
-  state=result; exp=state.experiments.at(-1);
+  state=result; window.state=state; exp=state.experiments.at(-1);
   selected=exp?.options.find(o=>o.plan===selected?.plan)||exp?.options.find(o=>o.feasible)||exp?.options[0]||null;
   render();
 }
@@ -118,6 +118,6 @@ $('live').onchange=()=>{$('consentLabel').hidden=!$('live').checked;$('aiStatus'
 $('view').onchange=renderTimeline;$('rotation').onchange=renderTimeline;
 for(let i=1;i<=10;i++)$('rotation').insertAdjacentHTML('beforeend',`<option value="${i}">Rotation ${i}</option>`);
 $('refresh').onclick=()=>action(loadHistory);
-$('switchDesk').onclick=()=>action(async()=>{const next=$('desk').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(next))throw Error('Use a valid desk ID.');desk=next;localStorage.setItem('irop-desk',desk);state=null;selected=null;exp=null;$('scenario').hidden=true;$('empty').hidden=false;$('events').innerHTML='';await loadHistory();await window.reloadObservations?.();message('Switched to desk '+desk);});
+$('switchDesk').onclick=()=>action(async()=>{const next=$('desk').value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(next))throw Error('Use a valid desk ID.');desk=next;localStorage.setItem('irop-desk',desk);state=null;window.state=null;selected=null;exp=null;$('scenario').hidden=true;$('empty').hidden=false;$('events').innerHTML='';await loadHistory();await window.reloadObservations?.();message('Switched to desk '+desk);});
 window.addEventListener('recovery-cards-ready',()=>{if(state)renderOptions();});
 (async()=>{try{const status=await api('status');if(!status.live_available){$('live').disabled=true;$('aiStatus').textContent='Deterministic planner · live AI requires server credentials';}await loadHistory();}catch(error){message(error.message,true);}})();
