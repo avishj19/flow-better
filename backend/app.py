@@ -110,7 +110,24 @@ def approve(ident:str,body:Approval):
         event(r,'simulation_approved',{'experiment_id':ex['id'],'plan':body.plan,'from_revision':body.revision,'to_revision':r['revision'],'result':actual['metrics'],'scope':'Simulation only'})
         store.save_run(DATA,r);return r
 @app.get('/')
-def home():return FileResponse(ROOT/'frontend/index.html')
+def home():return FileResponse(ROOT/'dist/index.html')
+
+@app.get('/desk')
+def recovery_desk():return FileResponse(ROOT/'frontend/index.html')
+
+@app.get('/site.css')
+def story_styles():return FileResponse(ROOT/'dist/site.css')
+
+@app.get('/site.js')
+def story_script():return FileResponse(ROOT/'dist/site.js')
+
+@app.get('/content.js')
+def story_content():return FileResponse(ROOT/'dist/content.js')
+
+@app.get('/style-tile.html')
+def story_board():return FileResponse(ROOT/'dist/style-tile.html')
+
+app.mount('/assets',StaticFiles(directory=ROOT/'dist/assets'),name='story-assets')
 app.mount('/static',StaticFiles(directory=ROOT/'frontend'),name='static')
 
 

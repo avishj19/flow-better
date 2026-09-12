@@ -1,5 +1,7 @@
 # FlowBetter — explainable airline recovery
 
+**Airport-facing website:** the new cinematic landing page is served at `/`; the complete recovery dashboard is now at `/desk`. See [WEBSITE-HANDOFF.md](WEBSITE-HANDOFF.md) for site editing, assets, motion, and hosting details.
+
 A dark-mode Airline IROP Recovery Dashboard: generate a synthetic day, apply four disruptions, compare three recovery strategies, inspect the underlying math, and approve a plan inside the simulation. Existing navigation, network, timeline and history structure are retained; React renders the recovery cards.
 
 ## Run
