@@ -569,3 +569,111 @@ def scenario_context(disruptions=None):
         'pillars': pillar_implications(disruptions),
         'scope': SCOPE,
     }
+
+def flight_insight(origin: str, destination: str, month: int, year: int | None = None):
+    """Teaching brief for a user-entered city-pair using bundled decade logs.
+
+    Not a live schedule/weather product — historical context only.
+    """
+    origin = _airport(origin)
+    destination = _airport(destination)
+    if origin is None or destination is None:
+        raise ValueError('Origin and destination are required')
+    if origin == destination:
+        raise ValueError('Origin and destination must differ')
+    month = int(month)
+    if month < 1 or month > 12:
+        raise ValueError('Month must be 1–12')
+    year = int(year) if year is not None else 2024
+    if year < 2016 or year > 2025:
+        raise ValueError('Year must be 2016–2025')
+
+    season = (
+        'winter' if month in (12, 1, 2) else
+        'spring' if month in (3, 4, 5) else
+        'summer' if month in (6, 7, 8) else
+        'fall'
+    )
+    weather_ref_year = 2022 if season == 'winter' else year
+
+    def _airport_block(code: str, role: str):
+        otp_rows = otp_year(code, year)
+        otp = otp_rows[0] if otp_rows else None
+        wx_rows = weather_year(code, weather_ref_year)
+        wx = wx_rows[0] if wx_rows else None
+        # Prefer flaw days in the same calendar month when available.
+        month_flaws = [f for f in flaw_days(code, limit=40, weather_only=(season in ('winter', 'summer')))
+                       if int(f.get('month') or 0) == month]
+        flaws = (month_flaws or flaw_days(code, limit=5, weather_only=False))[:3]
+        mapped = []
+        for f in flaws:
+            c = classify_flaw_day(f)
+            mapped.append({
+                'date': f.get('date'),
+                'dep_cancel_rate': f.get('dep_cancel_rate'),
+                'dep_delay15_rate': f.get('dep_delay15_rate'),
+                'weather_delay_min': f.get('weather_delay_min'),
+                'pattern': c.get('pattern'),
+                'desk_read': c.get('desk_read'),
+                'teaching': c.get('teaching'),
+            })
+        bullets = []
+        if otp:
+            bullets.append(
+                f"{year} departure OTP {otp.get('dep_ontime_pct')}% · "
+                f"cancel {otp.get('dep_cancelled_pct')}% · "
+                f"weather share of delay causes {otp.get('origin_cause_weather_share_pct')}%"
+            )
+        if wx:
+            bullets.append(
+                f"NOAA {weather_ref_year}: snowfall {wx.get('total_snowfall_in')} in · "
+                f"thunder days {wx.get('thunder_days_WT03')} · "
+                f"fog days {wx.get('fog_days_WT01')} · "
+                f"extreme wind days {wx.get('extreme_wind_days_WSF2_ge_40mph')}"
+            )
+        if mapped:
+            top = mapped[0]
+            cancel = top.get('dep_cancel_rate')
+            cancel_pct = round(float(cancel) * 100, 1) if cancel is not None else None
+            bullets.append(
+                f"Sample disruption day {top.get('date')}"
+                + (f" · {cancel_pct}% departures cancelled" if cancel_pct is not None else '')
+                + (f" · {top.get('pattern')}" if top.get('pattern') else '')
+            )
+        return {
+            'airport': code,
+            'role': role,
+            'otp': otp,
+            'weather': wx,
+            'flaw_days': mapped,
+            'bullets': bullets,
+        }
+
+    origin_block = _airport_block(origin, 'origin')
+    dest_block = _airport_block(destination, 'destination')
+
+    takeaways = [
+        f"{origin}→{destination} in {month}/{year} ({season}) — historical pack context only.",
+    ]
+    if origin_block['otp'] and dest_block['otp']:
+        o, e = origin_block['otp'], dest_block['otp']
+        worse = origin if (o.get('dep_ontime_pct') or 0) <= (e.get('dep_ontime_pct') or 0) else destination
+        takeaways.append(
+            f"In {year}, {worse} had the weaker departure OTP on this pair "
+            f"({origin} {o.get('dep_ontime_pct')}% vs {destination} {e.get('dep_ontime_pct')}%)."
+        )
+    if season == 'winter':
+        takeaways.append('Winter months in this pack often surface snow/late-aircraft cascades — ferry vs cancel-bank trade-offs matter more than annual averages.')
+    elif season == 'summer':
+        takeaways.append('Summer packs emphasize thunder/wind days — short-turn and NAS delay minutes tend to dominate teaching scenarios.')
+    else:
+        takeaways.append('Shoulder seasons still show cancel/delay spikes on sample flaw days; check the listed dates before treating a quiet annual average as typical.')
+    takeaways.append('This is not a live flight prediction or operational recommendation.')
+
+    return {
+        'input': {'origin': origin, 'destination': destination, 'month': month, 'year': year, 'season': season},
+        'airports': [origin_block, dest_block],
+        'takeaways': takeaways,
+        'scope': SCOPE,
+        'sources': ['BTS PREZIP OTP', 'FAA enplanements join', 'NOAA GHCND', 'sample flaw days'],
+    }
